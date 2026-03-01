@@ -29,7 +29,15 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. User can switch between Pose Mode (editing bind pose) and Animate Mode without corrupting existing bone transforms
   4. User can undo and redo any editing action, and the project state before and after each undo/redo is visually correct
   5. User can close and reopen the browser tab and resume editing without any data loss (auto-saved to IndexedDB)
-**Plans**: TBD
+**Plans**: 6 plans
+
+Plans:
+- [ ] 01-01-PLAN.md — Project scaffold, TypeScript data model, Zustand store with Immer patch undo/redo
+- [ ] 01-02-PLAN.md — PixiJS viewport mount, camera pan/zoom, Spine-style bone rendering, grid overlay
+- [ ] 01-03-PLAN.md — Move/Rotate/Scale gizmos with globalpointermove drag, click-to-create bone workflow
+- [ ] 01-04-PLAN.md — Image import sidebar, attachment rendering (PixiJS Sprites following bone transforms), IndexedDB image storage
+- [ ] 01-05-PLAN.md — Editor shell toolbar, mode toggle with visual enforcement, status bar, bone rename
+- [ ] 01-06-PLAN.md — IndexedDB auto-save (debounced 500ms), session restore on page load
 
 ### Phase 2: Animation
 **Goal**: Users can animate a rigged skeleton — create named animations, set keyframes on any bone property, scrub the timeline, and preview the result playing back in real time
@@ -73,7 +81,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation | 0/TBD | Not started | - |
+| 1. Foundation | 0/6 | Planned | - |
 | 2. Animation | 0/TBD | Not started | - |
 | 3. Export and Runtime | 0/TBD | Not started | - |
 | 4. Panels and Polish | 0/TBD | Not started | - |
