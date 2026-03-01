@@ -130,20 +130,58 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| BONE-01 through BONE-10 | — | Pending |
-| ATTACH-01 through ATTACH-05 | — | Pending |
-| ANIM-01 through ANIM-09 | — | Pending |
-| VIEW-01 through VIEW-05 | — | Pending |
-| PERSIST-01 through PERSIST-06 | — | Pending |
-| RUNTIME-01 through RUNTIME-05 | — | Pending |
-| PANEL-01 through PANEL-04 | — | Pending |
-| THEME-01 through THEME-02 | — | Pending |
+| BONE-01 | Phase 1 | Pending |
+| BONE-02 | Phase 1 | Pending |
+| BONE-03 | Phase 1 | Pending |
+| BONE-04 | Phase 1 | Pending |
+| BONE-05 | Phase 1 | Pending |
+| BONE-06 | Phase 1 | Pending |
+| BONE-07 | Phase 1 | Pending |
+| BONE-08 | Phase 1 | Pending |
+| BONE-09 | Phase 1 | Pending |
+| BONE-10 | Phase 1 | Pending |
+| ATTACH-01 | Phase 1 | Pending |
+| ATTACH-02 | Phase 1 | Pending |
+| ATTACH-03 | Phase 1 | Pending |
+| ATTACH-04 | Phase 1 | Pending |
+| ATTACH-05 | Phase 1 | Pending |
+| VIEW-01 | Phase 1 | Pending |
+| VIEW-02 | Phase 1 | Pending |
+| VIEW-03 | Phase 1 | Pending |
+| VIEW-04 | Phase 1 | Pending |
+| VIEW-05 | Phase 1 | Pending |
+| PERSIST-01 | Phase 1 | Pending |
+| PERSIST-02 | Phase 1 | Pending |
+| PERSIST-03 | Phase 1 | Pending |
+| ANIM-01 | Phase 2 | Pending |
+| ANIM-02 | Phase 2 | Pending |
+| ANIM-03 | Phase 2 | Pending |
+| ANIM-04 | Phase 2 | Pending |
+| ANIM-05 | Phase 2 | Pending |
+| ANIM-06 | Phase 2 | Pending |
+| ANIM-07 | Phase 2 | Pending |
+| ANIM-08 | Phase 2 | Pending |
+| ANIM-09 | Phase 2 | Pending |
+| PERSIST-04 | Phase 3 | Pending |
+| PERSIST-05 | Phase 3 | Pending |
+| PERSIST-06 | Phase 3 | Pending |
+| RUNTIME-01 | Phase 3 | Pending |
+| RUNTIME-02 | Phase 3 | Pending |
+| RUNTIME-03 | Phase 3 | Pending |
+| RUNTIME-04 | Phase 3 | Pending |
+| RUNTIME-05 | Phase 3 | Pending |
+| PANEL-01 | Phase 4 | Pending |
+| PANEL-02 | Phase 4 | Pending |
+| PANEL-03 | Phase 4 | Pending |
+| PANEL-04 | Phase 4 | Pending |
+| THEME-01 | Phase 4 | Pending |
+| THEME-02 | Phase 4 | Pending |
 
 **Coverage:**
-- v1 requirements: 49 total
-- Mapped to phases: 0
-- Unmapped: 49 ⚠️
+- v1 requirements: 46 total
+- Mapped to phases: 46
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-02-28*
-*Last updated: 2026-02-28 after initial definition*
+*Last updated: 2026-02-28 after roadmap creation — all 46 v1 requirements mapped to phases*
