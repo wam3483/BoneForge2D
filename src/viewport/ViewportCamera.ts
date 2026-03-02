@@ -1,4 +1,4 @@
-import { Container, FederatedPointerEvent, Application } from 'pixi.js'
+import { Container, FederatedPointerEvent, Application, Graphics } from 'pixi.js'
 import { useEditorStore } from '../store'
 import { evaluateWorldTransform } from '../model/transforms'
 
@@ -9,6 +9,11 @@ export class ViewportCamera {
   private app: Application
   private isPanning = false
   private lastPanPos = { x: 0, y: 0 }
+
+  // Bone creation drag state
+  private isCreatingBone = false
+  private boneCreationStart: { x: number; y: number } | null = null
+  private bonePreviewGraphics: Graphics | null = null
 
   constructor(app: Application) {
     this.app = app
@@ -37,35 +42,31 @@ export class ViewportCamera {
 
       // Left-click: bone creation (only in select tool, pose mode)
       if (e.button === 0 && state.activeTool === 'select' && state.editorMode === 'pose') {
-        console.log('ViewportCamera: bone creation trigger', { global: { x: e.global.x, y: e.global.y } })
         const worldPos = this.screenToWorld(e.global.x, e.global.y)
         const parentId = state.selectedBoneId // null = root bone
 
-        const newBoneId = state.createBone(parentId)
-        console.log('ViewportCamera: created bone', { newBoneId, parentId })
+        this.isCreatingBone = true
+        this.boneCreationStart = worldPos
 
-        // Place new bone at click position in local space
-        if (parentId) {
-          // Child bone: convert world click position to parent's local space
-          const parentWorld = evaluateWorldTransform(parentId, state.skeleton)
-          const cos = Math.cos(-parentWorld.rotation)
-          const sin = Math.sin(-parentWorld.rotation)
-          const dx = worldPos.x - parentWorld.x
-          const dy = worldPos.y - parentWorld.y
-          // Calculate local position WITHOUT dividing by scale (fixes magnification issue)
-          const localX = cos * dx - sin * dy
-          const localY = sin * dx + cos * dy
-          useEditorStore.getState().setBoneTransform(newBoneId, { x: localX, y: localY })
-        } else {
-          // Root bone: local IS world
-          useEditorStore.getState().setBoneTransform(newBoneId, { x: worldPos.x, y: worldPos.y })
+        // Create preview graphics for drag visualization
+        if (!this.bonePreviewGraphics) {
+          this.bonePreviewGraphics = new Graphics()
+          this.bonePreviewGraphics.zIndex = 1000 // render above other bones
+          this.container.addChild(this.bonePreviewGraphics)
         }
 
-        // Select new bone (stay in Select mode so user can keep creating bones)
-        useEditorStore.getState().setSelectedBone(newBoneId)
+        console.log('ViewportCamera: starting bone creation drag', { worldPos, parentId })
       }
     })
     stage.on('globalpointermove', (e: FederatedPointerEvent) => {
+      // Handle bone creation preview
+      if (this.isCreatingBone && this.boneCreationStart && this.bonePreviewGraphics) {
+        const currentWorld = this.screenToWorld(e.global.x, e.global.y)
+        this.updateBonePreview(this.boneCreationStart, currentWorld)
+        return
+      }
+
+      // Handle panning
       if (!this.isPanning) return
       const dx = e.global.x - this.lastPanPos.x
       const dy = e.global.y - this.lastPanPos.y
@@ -74,8 +75,81 @@ export class ViewportCamera {
       this.lastPanPos = { x: e.global.x, y: e.global.y }
       this.onCameraChange?.()
     })
-    stage.on('pointerup', () => { this.isPanning = false })
-    stage.on('pointerupoutside', () => { this.isPanning = false })
+    stage.on('pointerup', () => {
+      // Finalize bone creation
+      if (this.isCreatingBone && this.boneCreationStart) {
+        this.finalizeBoneCreation()
+        return
+      }
+      this.isPanning = false
+    })
+    stage.on('pointerupoutside', () => {
+      // Finalize bone creation if dragged outside
+      if (this.isCreatingBone) {
+        this.finalizeBoneCreation()
+        return
+      }
+      this.isPanning = false
+    })
+  }
+
+  private updateBonePreview(start: { x: number; y: number }, end: { x: number; y: number }): void {
+    if (!this.bonePreviewGraphics) return
+
+    const g = this.bonePreviewGraphics
+    g.clear()
+
+    // Draw preview bone (cyan line, different from normal bones)
+    g.setStrokeStyle({ width: 2, color: 0x00ffff, alpha: 0.8 })
+    g.moveTo(start.x, start.y)
+    g.lineTo(end.x, end.y)
+    g.stroke()
+
+    // Draw endpoint circle
+    g.setFillStyle({ color: 0x00ffff, alpha: 0.8 })
+    g.circle(end.x, end.y, 5)
+    g.fill()
+
+    // Draw start point (white, brighter than normal bone)
+    g.setFillStyle({ color: 0xffffff, alpha: 1 })
+    g.circle(start.x, start.y, 4)
+    g.fill()
+  }
+
+  private finalizeBoneCreation(): void {
+    if (!this.boneCreationStart || !this.bonePreviewGraphics) return
+
+    const state = useEditorStore.getState()
+    const currentScreen = this.app.renderer.events.pointer.global
+    const endWorld = this.screenToWorld(currentScreen.x, currentScreen.y)
+    const parentId = state.selectedBoneId // null = root bone
+
+    // Create the actual bone
+    const newBoneId = state.createBone(parentId)
+
+    // Place new bone at end position in local space
+    if (parentId) {
+      const parentWorld = evaluateWorldTransform(parentId, state.skeleton)
+      const cos = Math.cos(-parentWorld.rotation)
+      const sin = Math.sin(-parentWorld.rotation)
+      const dx = endWorld.x - parentWorld.x
+      const dy = endWorld.y - parentWorld.y
+      const localX = cos * dx - sin * dy
+      const localY = sin * dx + cos * dy
+      useEditorStore.getState().setBoneTransform(newBoneId, { x: localX, y: localY })
+    } else {
+      useEditorStore.getState().setBoneTransform(newBoneId, { x: endWorld.x, y: endWorld.y })
+    }
+
+    // Select new bone
+    useEditorStore.getState().setSelectedBone(newBoneId)
+
+    console.log('ViewportCamera: finalized bone creation', { newBoneId, parentId, endWorld })
+
+    // Clear preview
+    this.bonePreviewGraphics.clear()
+    this.isCreatingBone = false
+    this.boneCreationStart = null
   }
 
   setupWheelZoom(canvas: HTMLCanvasElement): void {
