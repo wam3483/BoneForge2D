@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { PixiViewport } from './viewport/PixiViewport'
+import { Sidebar } from './components/Sidebar'
 import { useEditorStore } from './store'
 import { initAutoSave, setSaveIndicatorCallback } from './persistence/autoSave'
 import { loadProject, loadAllImageBuffers } from './persistence/indexeddb'
@@ -106,15 +107,8 @@ export default function App() {
         {/* Canvas area */}
         <PixiViewport />
 
-        {/* Right sidebar placeholder */}
-        <div className="w-60 bg-gray-800 border-l border-gray-700 flex flex-col">
-          <div className="p-4 border-b border-gray-700">
-            <h2 className="text-sm font-semibold text-gray-300">Properties</h2>
-          </div>
-          <div className="p-4 text-sm text-gray-500">
-            Sidebar content will be added in Plan 04
-          </div>
-        </div>
+        {/* Right sidebar with image import and attachment controls */}
+        <Sidebar />
       </div>
 
       {/* Bottom status bar placeholder */}
