@@ -15,7 +15,7 @@
 - [x] **BONE-06**: User can move a bone in the viewport using a translate gizmo
 - [x] **BONE-07**: User can rotate a bone in the viewport using a rotate gizmo
 - [x] **BONE-08**: User can scale a bone in the viewport using a scale gizmo
-- [ ] **BONE-09**: User can switch between Pose Mode (edit bind pose) and Animate Mode (add keyframes) — modes are mutually exclusive
+- [x] **BONE-09**: User can switch between Pose Mode (edit bind pose) and Animate Mode (add keyframes) — modes are mutually exclusive
 - [x] **BONE-10**: User can toggle the visibility of individual bones in the viewport
 
 ### Attachments
@@ -138,7 +138,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | BONE-06 | Phase 1 | Complete |
 | BONE-07 | Phase 1 | Complete |
 | BONE-08 | Phase 1 | Complete |
-| BONE-09 | Phase 1 | Pending |
+| BONE-09 | Phase 1 | Complete |
 | BONE-10 | Phase 1 | Complete |
 | ATTACH-01 | Phase 1 | Complete |
 | ATTACH-02 | Phase 1 | Complete |
