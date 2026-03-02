@@ -43,9 +43,12 @@ function drawBoneShape(
 
 function getBoneLength(bone: Bone, skeleton: Skeleton): number {
   if (bone.childIds.length === 0) return 60 // default leaf length
-  // Use distance to first child as the bone length
+  // Use distance to first child in WORLD space as the bone length
+  // This prevents magnification issue when child local coordinates are scaled
   const child = skeleton.bones[bone.childIds[0]]
-  return Math.hypot(child.localTransform.x, child.localTransform.y)
+  const boneWorld = evaluateWorldTransform(bone.id, skeleton)
+  const childWorld = evaluateWorldTransform(child.id, skeleton)
+  return Math.hypot(childWorld.x - boneWorld.x, childWorld.y - boneWorld.y)
 }
 
 // --- Grid drawing ---

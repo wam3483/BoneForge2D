@@ -52,8 +52,9 @@ export class ViewportCamera {
           const sin = Math.sin(-parentWorld.rotation)
           const dx = worldPos.x - parentWorld.x
           const dy = worldPos.y - parentWorld.y
-          const localX = (cos * dx - sin * dy) / parentWorld.scaleX
-          const localY = (sin * dx + cos * dy) / parentWorld.scaleY
+          // Calculate local position WITHOUT dividing by scale (fixes magnification issue)
+          const localX = cos * dx - sin * dy
+          const localY = sin * dx + cos * dy
           useEditorStore.getState().setBoneTransform(newBoneId, { x: localX, y: localY })
         } else {
           // Root bone: local IS world
