@@ -1,4 +1,4 @@
-import type { Bone, BoneTransform, Skeleton } from './types'
+import type { BoneTransform, Skeleton } from './types'
 
 export interface WorldTransform extends BoneTransform {}
 

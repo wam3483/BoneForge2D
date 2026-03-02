@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import type { Bone, BoneTransform, Skeleton } from './types'
-import { evaluateWorldTransform, type WorldTransform } from './transforms'
+import { evaluateWorldTransform } from './transforms'
 
 describe('evaluateWorldTransform', () => {
   function makeBone(
