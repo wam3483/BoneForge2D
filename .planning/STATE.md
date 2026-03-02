@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-03-02T04:22:35.905Z"
+last_updated: "2026-03-02T04:34:18.108Z"
 progress:
   total_phases: 1
   completed_phases: 0
   total_plans: 6
-  completed_plans: 3
+  completed_plans: 4
 ---
 
 # Project State
@@ -54,6 +54,7 @@ Progress: [███░░░░░░░] 50% (3 of 6 plans)
 | 01-foundation | 01-06 | 257s (4 min) | 2 | 3 |
 | 01-foundation | 01-02 | 433s (7 min) | 2 | 4 |
 | Phase 01-foundation P02 | 660 | 2 tasks | 4 files |
+| Phase 01-foundation P01-03 | 515 | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -80,6 +81,11 @@ Recent decisions affecting current work:
 - [Phase 01-foundation]: Imperative PixiJS Graphics with useTick - avoids React reconciliation overhead for high-frequency bone rendering
 - [Phase 01-foundation]: Camera container pattern - ViewportCamera manages pan/zoom, screenToWorld coordinate conversion
 - [Phase 01-foundation]: Dynamic import of ViewportCamera - avoids circular dependency between PixiViewport and BoneRenderer
+- [Phase 01-foundation]: globalpointermove on app.stage for drag - tracks pointer even when outside gizmo handle bounds
+- [Phase 01-foundation]: Transform deltas computed in local space - screen->world->local conversion with parent rotation
+- [Phase 01-foundation]: Gizmo render order - z-index 1000 to render above bones
+- [Phase 01-foundation]: Axis-constrained dragging - X/Y handles for move and scale tools
+- [Phase 01-foundation]: Rotation snap to 15-degree increments when grid snap enabled
 
 ### Pending Todos
 
