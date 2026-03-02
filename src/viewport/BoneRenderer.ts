@@ -86,12 +86,18 @@ export function BoneRendererLayer() {
       const canvas = app.canvas as HTMLCanvasElement
       cam.setupWheelZoom(canvas)
 
-      // Grid graphics in camera container (below bones)
+      // Grid graphics in camera container (below attachments)
       const gridG = new Graphics()
       cam.container.addChild(gridG)
       gridGraphicsRef.current = gridG
 
-      // Bones container above grid
+      // Attachments container (for attached image Sprites) - below bones
+      const attachmentsContainer = new Container()
+      attachmentsContainer.sortableChildren = true
+      cam.container.addChild(attachmentsContainer)
+      setAttachmentsContainer(attachmentsContainer)
+
+      // Bones container above attachments
       const bonesContainer = new Container()
       cam.container.addChild(bonesContainer)
 
@@ -114,6 +120,7 @@ export function BoneRendererLayer() {
       cameraRef.current?.camera.destroy()
       cameraRef.current = null
       boneGraphicsRef.current.clear()
+      setAttachmentsContainer(null)
     }
   }, [app])
 
@@ -123,6 +130,15 @@ export function BoneRendererLayer() {
     import('./GizmoLayer').then(({ GizmoLayer }) => {
       const gizmo = new GizmoLayer(app, cameraRef.current!.camera.container)
       gizmoLayerRef.current = gizmo
+    })
+  }, [app])
+
+  // Initialize bone creation after camera is ready
+  useEffect(() => {
+    if (!cameraRef.current) return
+    import('./BoneCreation').then(({ setupBoneCreation }) => {
+      const cleanup = setupBoneCreation(app, cameraRef.current!.camera)
+      return cleanup
     })
   }, [app])
 
