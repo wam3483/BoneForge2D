@@ -50,7 +50,7 @@
 
 - [x] **PERSIST-01**: User can undo the last editing action (Ctrl+Z)
 - [x] **PERSIST-02**: User can redo an undone action (Ctrl+Y / Ctrl+Shift+Z)
-- [ ] **PERSIST-03**: User's active project is automatically persisted to browser storage (IndexedDB) so it survives page refresh without manual saving
+- [x] **PERSIST-03**: User's active project is automatically persisted to browser storage (IndexedDB) so it survives page refresh without manual saving
 - [ ] **PERSIST-04**: User can export the full project (bones, attachments, animations, images) as a downloadable file for backup or transfer between devices
 - [ ] **PERSIST-05**: User can import a previously exported project file to resume editing from where they left off
 - [ ] **PERSIST-06**: User can export the skeleton and animations as a BoneForge JSON file for use in a PixiJS game via the runtime package
@@ -152,7 +152,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | VIEW-05 | Phase 1 | Pending |
 | PERSIST-01 | Phase 1 | Complete |
 | PERSIST-02 | Phase 1 | Complete |
-| PERSIST-03 | Phase 1 | Pending |
+| PERSIST-03 | Phase 1 | Complete |
 | ANIM-01 | Phase 2 | Pending |
 | ANIM-02 | Phase 2 | Pending |
 | ANIM-03 | Phase 2 | Pending |

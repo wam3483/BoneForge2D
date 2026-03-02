@@ -81,7 +81,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation | 0/6 | Planned | - |
+| 1. Foundation | 2/6 | In progress | 01-01, 01-06 |
 | 2. Animation | 0/TBD | Not started | - |
 | 3. Export and Runtime | 0/TBD | Not started | - |
 | 4. Panels and Polish | 0/TBD | Not started | - |
