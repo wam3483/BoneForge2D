@@ -5,6 +5,8 @@ import type { ViewportCamera } from './ViewportCamera'
 
 export function setupBoneCreation(app: Application, camera: ViewportCamera): () => void {
   const stage = app.stage
+  // Enable pointer events on the stage so it receives background clicks
+  stage.eventMode = 'static'
 
   function onStagePointerDown(e: FederatedPointerEvent): void {
     // Only left-click, only 'select' tool (so gizmo drags don't accidentally create bones)
