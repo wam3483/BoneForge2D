@@ -94,6 +94,13 @@ export function PixiViewport() {
         <AttachmentRendererLayer />
         <BoneRendererLayer />
       </Application>
+
+      {/* Animate Mode banner */}
+      {editorMode === 'animate' && (
+        <div className="absolute top-8 left-1/2 -translate-x-1/2 bg-orange-600/90 text-white text-sm px-4 py-1.5 rounded-full backdrop-blur-sm pointer-events-none">
+          Animate Mode — timeline coming in Phase 2
+        </div>
+      )}
     </div>
   )
 }

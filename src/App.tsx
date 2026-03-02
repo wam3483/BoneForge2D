@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { PixiViewport } from './viewport/PixiViewport'
 import { Sidebar } from './components/Sidebar'
+import { Toolbar } from './components/Toolbar'
+import { StatusBar } from './components/StatusBar'
 import { useEditorStore } from './store'
 import { initAutoSave, setSaveIndicatorCallback } from './persistence/autoSave'
 import { loadProject, loadAllImageBuffers } from './persistence/indexeddb'
@@ -92,11 +94,13 @@ export default function App() {
   return (
     <div className="h-screen flex flex-col bg-[var(--color-viewport-bg)] text-white overflow-hidden">
       {/* Top toolbar */}
-      <div className="h-12 bg-gray-900 flex items-center justify-between px-4 border-b border-gray-700">
-        <h1 className="text-lg font-bold">BoneForge 2D</h1>
-        {/* Save indicator */}
+      <div className="relative">
+        <Toolbar />
+        {/* Save indicator overlay */}
         {saveStatus !== 'idle' && (
-          <span className={`text-xs px-2 py-0.5 rounded ${saveStatus === 'saved' ? 'text-green-400' : 'text-red-400'}`}>
+          <span className={`absolute top-1/2 -translate-y-1/2 left-1/2 -translate-x-1/2 text-xs px-3 py-1 rounded-full ${
+            saveStatus === 'saved' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'
+          }`}>
             {saveStatus === 'saved' ? 'Saved' : 'Save failed'}
           </span>
         )}
@@ -111,10 +115,8 @@ export default function App() {
         <Sidebar />
       </div>
 
-      {/* Bottom status bar placeholder */}
-      <div className="h-8 bg-gray-900 border-t border-gray-700 flex items-center px-4 text-xs text-gray-400">
-        <span>Status bar content will be added in Plan 05</span>
-      </div>
+      {/* Bottom status bar */}
+      <StatusBar />
     </div>
   )
 }
