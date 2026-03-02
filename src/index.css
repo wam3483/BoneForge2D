@@ -1,0 +1,10 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bone-default: #7c3aed;
+  --color-bone-selected: #f59e0b;
+  --color-bone-hover: #fcd34d;
+  --color-viewport-bg: #1a1a2e;
+  --color-mode-pose: #3b82f6;
+  --color-mode-animate: #f97316;
+}
