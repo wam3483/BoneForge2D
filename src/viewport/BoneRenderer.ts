@@ -3,6 +3,7 @@ import { useApplication, useTick } from '@pixi/react'
 import { Container, Graphics, Text, TextStyle, FederatedPointerEvent } from 'pixi.js'
 import { useEditorStore } from '../store'
 import { evaluateWorldTransform } from '../model/transforms'
+import { setAttachmentsContainer } from './AttachmentsRef'
 import type { Bone, Skeleton } from '../model/types'
 
 // --- Bone shape drawing ---
@@ -74,6 +75,7 @@ export function BoneRendererLayer() {
   const cameraRef = useRef<{ container: Container; camera: import('./ViewportCamera').ViewportCamera } | null>(null)
   const boneGraphicsRef = useRef<Map<string, { g: Graphics; label: Text }>>(new Map())
   const gridGraphicsRef = useRef<Graphics | null>(null)
+  const gizmoLayerRef = useRef<import('./GizmoLayer').GizmoLayer | null>(null)
 
   const store = useEditorStore
 
@@ -107,17 +109,28 @@ export function BoneRendererLayer() {
     })
 
     return () => {
+      gizmoLayerRef.current?.destroy()
+      gizmoLayerRef.current = null
       cameraRef.current?.camera.destroy()
       cameraRef.current = null
       boneGraphicsRef.current.clear()
     }
   }, [app])
 
+  // Initialize GizmoLayer after camera is ready
+  useEffect(() => {
+    if (!cameraRef.current) return
+    import('./GizmoLayer').then(({ GizmoLayer }) => {
+      const gizmo = new GizmoLayer(app, cameraRef.current!.camera.container)
+      gizmoLayerRef.current = gizmo
+    })
+  }, [app])
+
   useTick(() => {
     if (!cameraRef.current) return
     const { container: bonesContainer, camera } = cameraRef.current
     const state = store.getState()
-    const { skeleton, selectedBoneId, hoveredBoneId, gridVisible, snapGridSize } = state
+    const { skeleton, selectedBoneId, hoveredBoneId, gridVisible, snapGridSize, activeTool } = state
     const camState = camera.getState()
 
     // --- Grid ---
@@ -191,6 +204,17 @@ export function BoneRendererLayer() {
         drawBoneShape(entry.g, boneLen, isSelected, isHovered, bone.visible)
       } catch {
         // Bone might temporarily not have a parent during creation
+      }
+    }
+
+    // --- Gizmos ---
+    if (gizmoLayerRef.current) {
+      gizmoLayerRef.current.update()
+
+      // Setup handle listeners for selected bone when tool changes
+      const gizmoMode = activeTool === 'select' ? null : activeTool
+      if (selectedBoneId && gizmoMode) {
+        gizmoLayerRef.current.setupHandleListeners(gizmoMode, selectedBoneId)
       }
     }
   })
