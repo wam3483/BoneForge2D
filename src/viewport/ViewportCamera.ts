@@ -75,18 +75,23 @@ export class ViewportCamera {
       this.lastPanPos = { x: e.global.x, y: e.global.y }
       this.onCameraChange?.()
     })
-    stage.on('pointerup', () => {
+    stage.on('pointerup', (e: FederatedPointerEvent) => {
       // Finalize bone creation
       if (this.isCreatingBone && this.boneCreationStart) {
-        this.finalizeBoneCreation()
+        const endWorld = this.screenToWorld(e.global.x, e.global.y)
+        this.finalizeBoneCreation(endWorld)
         return
       }
       this.isPanning = false
     })
     stage.on('pointerupoutside', () => {
-      // Finalize bone creation if dragged outside
+      // Finalize bone creation if dragged outside (cancels the bone)
       if (this.isCreatingBone) {
-        this.finalizeBoneCreation()
+        if (this.bonePreviewGraphics) {
+          this.bonePreviewGraphics.clear()
+        }
+        this.isCreatingBone = false
+        this.boneCreationStart = null
         return
       }
       this.isPanning = false
@@ -116,12 +121,10 @@ export class ViewportCamera {
     g.fill()
   }
 
-  private finalizeBoneCreation(): void {
+  private finalizeBoneCreation(endWorld: { x: number; y: number }): void {
     if (!this.boneCreationStart || !this.bonePreviewGraphics) return
 
     const state = useEditorStore.getState()
-    const currentScreen = this.app.renderer.events.pointer.global
-    const endWorld = this.screenToWorld(currentScreen.x, currentScreen.y)
     const parentId = state.selectedBoneId // null = root bone
 
     // Create the actual bone
