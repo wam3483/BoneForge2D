@@ -7,11 +7,11 @@
 
 ### Bones
 
-- [ ] **BONE-01**: User can create a bone in the viewport with a default name
-- [ ] **BONE-02**: User can rename a bone
-- [ ] **BONE-03**: User can delete a bone (its children become children of the deleted bone's parent)
-- [ ] **BONE-04**: User can assign a parent to a bone to create a hierarchy
-- [ ] **BONE-05**: User can reparent a bone by dragging it in the hierarchy panel
+- [x] **BONE-01**: User can create a bone in the viewport with a default name
+- [x] **BONE-02**: User can rename a bone
+- [x] **BONE-03**: User can delete a bone (its children become children of the deleted bone's parent)
+- [x] **BONE-04**: User can assign a parent to a bone to create a hierarchy
+- [x] **BONE-05**: User can reparent a bone by dragging it in the hierarchy panel
 - [ ] **BONE-06**: User can move a bone in the viewport using a translate gizmo
 - [ ] **BONE-07**: User can rotate a bone in the viewport using a rotate gizmo
 - [ ] **BONE-08**: User can scale a bone in the viewport using a scale gizmo
@@ -48,8 +48,8 @@
 
 ### Persistence
 
-- [ ] **PERSIST-01**: User can undo the last editing action (Ctrl+Z)
-- [ ] **PERSIST-02**: User can redo an undone action (Ctrl+Y / Ctrl+Shift+Z)
+- [x] **PERSIST-01**: User can undo the last editing action (Ctrl+Z)
+- [x] **PERSIST-02**: User can redo an undone action (Ctrl+Y / Ctrl+Shift+Z)
 - [ ] **PERSIST-03**: User's active project is automatically persisted to browser storage (IndexedDB) so it survives page refresh without manual saving
 - [ ] **PERSIST-04**: User can export the full project (bones, attachments, animations, images) as a downloadable file for backup or transfer between devices
 - [ ] **PERSIST-05**: User can import a previously exported project file to resume editing from where they left off
@@ -130,11 +130,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| BONE-01 | Phase 1 | Pending |
-| BONE-02 | Phase 1 | Pending |
-| BONE-03 | Phase 1 | Pending |
-| BONE-04 | Phase 1 | Pending |
-| BONE-05 | Phase 1 | Pending |
+| BONE-01 | Phase 1 | Complete |
+| BONE-02 | Phase 1 | Complete |
+| BONE-03 | Phase 1 | Complete |
+| BONE-04 | Phase 1 | Complete |
+| BONE-05 | Phase 1 | Complete |
 | BONE-06 | Phase 1 | Pending |
 | BONE-07 | Phase 1 | Pending |
 | BONE-08 | Phase 1 | Pending |
@@ -150,8 +150,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | VIEW-03 | Phase 1 | Pending |
 | VIEW-04 | Phase 1 | Pending |
 | VIEW-05 | Phase 1 | Pending |
-| PERSIST-01 | Phase 1 | Pending |
-| PERSIST-02 | Phase 1 | Pending |
+| PERSIST-01 | Phase 1 | Complete |
+| PERSIST-02 | Phase 1 | Complete |
 | PERSIST-03 | Phase 1 | Pending |
 | ANIM-01 | Phase 2 | Pending |
 | ANIM-02 | Phase 2 | Pending |
