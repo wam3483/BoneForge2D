@@ -25,6 +25,7 @@ export class ViewportCamera {
     // Combined pointerdown handler for both panning and bone creation
     stage.on('pointerdown', (e: FederatedPointerEvent) => {
       const state = useEditorStore.getState()
+      console.log('ViewportCamera: pointerdown', { button: e.button, target: e.target.name, activeTool: state.activeTool, editorMode: state.editorMode })
 
       // Middle-click or right-click: pan
       if (e.button === 1 || e.button === 2) {
@@ -41,6 +42,7 @@ export class ViewportCamera {
         const parentId = state.selectedBoneId // null = root bone
 
         const newBoneId = state.createBone(parentId)
+        console.log('ViewportCamera: created bone', { newBoneId, parentId })
 
         // Place new bone at click position in local space
         if (parentId) {
@@ -58,9 +60,8 @@ export class ViewportCamera {
           useEditorStore.getState().setBoneTransform(newBoneId, { x: worldPos.x, y: worldPos.y })
         }
 
-        // Select new bone and switch to Move tool
+        // Select new bone (stay in Select mode so user can keep creating bones)
         useEditorStore.getState().setSelectedBone(newBoneId)
-        useEditorStore.getState().setActiveTool('move')
       }
     })
     stage.on('globalpointermove', (e: FederatedPointerEvent) => {
