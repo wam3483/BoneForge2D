@@ -20,11 +20,11 @@
 
 ### Attachments
 
-- [ ] **ATTACH-01**: User can import PNG and JPG image files into the project
-- [ ] **ATTACH-02**: User can attach an imported image to a bone so it follows the bone's world transform
-- [ ] **ATTACH-03**: User can detach an image from a bone
-- [ ] **ATTACH-04**: User can adjust the draw order (z-index) of attachments so bones render in the correct stacking order
-- [ ] **ATTACH-05**: User can adjust the pivot/offset of an attachment relative to its bone's origin point
+- [x] **ATTACH-01**: User can import PNG and JPG image files into the project
+- [x] **ATTACH-02**: User can attach an imported image to a bone so it follows the bone's world transform
+- [x] **ATTACH-03**: User can detach an image from a bone
+- [x] **ATTACH-04**: User can adjust the draw order (z-index) of attachments so bones render in the correct stacking order
+- [x] **ATTACH-05**: User can adjust the pivot/offset of an attachment relative to its bone's origin point
 
 ### Animation
 
@@ -140,11 +140,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | BONE-08 | Phase 1 | Complete |
 | BONE-09 | Phase 1 | Pending |
 | BONE-10 | Phase 1 | Complete |
-| ATTACH-01 | Phase 1 | Pending |
-| ATTACH-02 | Phase 1 | Pending |
-| ATTACH-03 | Phase 1 | Pending |
-| ATTACH-04 | Phase 1 | Pending |
-| ATTACH-05 | Phase 1 | Pending |
+| ATTACH-01 | Phase 1 | Complete |
+| ATTACH-02 | Phase 1 | Complete |
+| ATTACH-03 | Phase 1 | Complete |
+| ATTACH-04 | Phase 1 | Complete |
+| ATTACH-05 | Phase 1 | Complete |
 | VIEW-01 | Phase 1 | Complete |
 | VIEW-02 | Phase 1 | Complete |
 | VIEW-03 | Phase 1 | Complete |
