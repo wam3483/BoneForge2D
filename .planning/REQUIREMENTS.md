@@ -16,7 +16,7 @@
 - [ ] **BONE-07**: User can rotate a bone in the viewport using a rotate gizmo
 - [ ] **BONE-08**: User can scale a bone in the viewport using a scale gizmo
 - [ ] **BONE-09**: User can switch between Pose Mode (edit bind pose) and Animate Mode (add keyframes) — modes are mutually exclusive
-- [ ] **BONE-10**: User can toggle the visibility of individual bones in the viewport
+- [x] **BONE-10**: User can toggle the visibility of individual bones in the viewport
 
 ### Attachments
 
@@ -40,11 +40,11 @@
 
 ### Viewport
 
-- [ ] **VIEW-01**: User can zoom in and out of the canvas viewport
-- [ ] **VIEW-02**: User can pan the canvas viewport
-- [ ] **VIEW-03**: User can toggle a grid overlay on the viewport
-- [ ] **VIEW-04**: User can enable snapping so bone transform operations snap to grid increments
-- [ ] **VIEW-05**: User can toggle visibility of individual bones without deleting them
+- [x] **VIEW-01**: User can zoom in and out of the canvas viewport
+- [x] **VIEW-02**: User can pan the canvas viewport
+- [x] **VIEW-03**: User can toggle a grid overlay on the viewport
+- [x] **VIEW-04**: User can enable snapping so bone transform operations snap to grid increments
+- [x] **VIEW-05**: User can toggle visibility of individual bones without deleting them
 
 ### Persistence
 
@@ -139,17 +139,17 @@ Which phases cover which requirements. Updated during roadmap creation.
 | BONE-07 | Phase 1 | Pending |
 | BONE-08 | Phase 1 | Pending |
 | BONE-09 | Phase 1 | Pending |
-| BONE-10 | Phase 1 | Pending |
+| BONE-10 | Phase 1 | Complete |
 | ATTACH-01 | Phase 1 | Pending |
 | ATTACH-02 | Phase 1 | Pending |
 | ATTACH-03 | Phase 1 | Pending |
 | ATTACH-04 | Phase 1 | Pending |
 | ATTACH-05 | Phase 1 | Pending |
-| VIEW-01 | Phase 1 | Pending |
-| VIEW-02 | Phase 1 | Pending |
-| VIEW-03 | Phase 1 | Pending |
-| VIEW-04 | Phase 1 | Pending |
-| VIEW-05 | Phase 1 | Pending |
+| VIEW-01 | Phase 1 | Complete |
+| VIEW-02 | Phase 1 | Complete |
+| VIEW-03 | Phase 1 | Complete |
+| VIEW-04 | Phase 1 | Complete |
+| VIEW-05 | Phase 1 | Complete |
 | PERSIST-01 | Phase 1 | Complete |
 | PERSIST-02 | Phase 1 | Complete |
 | PERSIST-03 | Phase 1 | Complete |
