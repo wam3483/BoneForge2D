@@ -7,11 +7,15 @@ export function setupBoneCreation(app: Application, camera: ViewportCamera): () 
   const stage = app.stage
   // Enable pointer events on the stage so it receives background clicks
   stage.eventMode = 'static'
+  // Set hit area to cover entire screen
+  stage.hitArea = app.screen
 
   function onStagePointerDown(e: FederatedPointerEvent): void {
+    console.log('BoneCreation: pointerdown', { button: e.button, global: { x: e.global.x, y: e.global.y } })
     // Only left-click, only 'select' tool (so gizmo drags don't accidentally create bones)
     if (e.button !== 0) return
     const state = useEditorStore.getState()
+    console.log('BoneCreation: state', { activeTool: state.activeTool, editorMode: state.editorMode })
     if (state.activeTool !== 'select') return
     if (state.editorMode !== 'pose') return // no bone creation in animate mode (Phase 1)
 
@@ -44,5 +48,9 @@ export function setupBoneCreation(app: Application, camera: ViewportCamera): () 
   }
 
   stage.on('pointerdown', onStagePointerDown)
-  return () => stage.off('pointerdown', onStagePointerDown)
+  console.log('BoneCreation: setup complete, stage eventMode:', stage.eventMode)
+  return () => {
+    stage.off('pointerdown', onStagePointerDown)
+    console.log('BoneCreation: cleanup')
+  }
 }

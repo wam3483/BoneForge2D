@@ -133,15 +133,6 @@ export function BoneRendererLayer() {
     })
   }, [app])
 
-  // Initialize bone creation after camera is ready
-  useEffect(() => {
-    if (!cameraRef.current) return
-    import('./BoneCreation').then(({ setupBoneCreation }) => {
-      const cleanup = setupBoneCreation(app, cameraRef.current!.camera)
-      return cleanup
-    })
-  }, [app])
-
   useTick(() => {
     if (!cameraRef.current) return
     const { container: bonesContainer, camera } = cameraRef.current

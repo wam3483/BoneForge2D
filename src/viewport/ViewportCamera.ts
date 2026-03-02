@@ -1,4 +1,6 @@
 import { Container, FederatedPointerEvent, Application } from 'pixi.js'
+import { useEditorStore } from '../store'
+import { evaluateWorldTransform } from '../model/transforms'
 
 export interface CameraState { x: number; y: number; scale: number }
 
@@ -20,12 +22,45 @@ export class ViewportCamera {
     stage.eventMode = 'static'
     stage.hitArea = this.app.screen
 
-    // Pan: right-click drag or middle-click drag
+    // Combined pointerdown handler for both panning and bone creation
     stage.on('pointerdown', (e: FederatedPointerEvent) => {
+      const state = useEditorStore.getState()
+
+      // Middle-click or right-click: pan
       if (e.button === 1 || e.button === 2) {
         this.isPanning = true
         this.lastPanPos = { x: e.global.x, y: e.global.y }
         e.stopPropagation()
+        return
+      }
+
+      // Left-click: bone creation (only in select tool, pose mode)
+      if (e.button === 0 && state.activeTool === 'select' && state.editorMode === 'pose') {
+        console.log('ViewportCamera: bone creation trigger', { global: { x: e.global.x, y: e.global.y } })
+        const worldPos = this.screenToWorld(e.global.x, e.global.y)
+        const parentId = state.selectedBoneId // null = root bone
+
+        const newBoneId = state.createBone(parentId)
+
+        // Place new bone at click position in local space
+        if (parentId) {
+          // Child bone: convert world click position to parent's local space
+          const parentWorld = evaluateWorldTransform(parentId, state.skeleton)
+          const cos = Math.cos(-parentWorld.rotation)
+          const sin = Math.sin(-parentWorld.rotation)
+          const dx = worldPos.x - parentWorld.x
+          const dy = worldPos.y - parentWorld.y
+          const localX = (cos * dx - sin * dy) / parentWorld.scaleX
+          const localY = (sin * dx + cos * dy) / parentWorld.scaleY
+          useEditorStore.getState().setBoneTransform(newBoneId, { x: localX, y: localY })
+        } else {
+          // Root bone: local IS world
+          useEditorStore.getState().setBoneTransform(newBoneId, { x: worldPos.x, y: worldPos.y })
+        }
+
+        // Select new bone and switch to Move tool
+        useEditorStore.getState().setSelectedBone(newBoneId)
+        useEditorStore.getState().setActiveTool('move')
       }
     })
     stage.on('globalpointermove', (e: FederatedPointerEvent) => {
