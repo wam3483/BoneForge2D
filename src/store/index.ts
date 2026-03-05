@@ -1,8 +1,9 @@
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
-import type { EditorState, Skeleton, ImageAsset, Attachment, Bone, BoneTransform } from '../model/types'
+import type { EditorState, Skeleton, ImageAsset, Attachment, Bone, BoneTransform, Project } from '../model/types'
 import { withUndo, applyPatches } from './undoRedo'
 import type { PatchEntry } from './undoRedo'
+import * as idb from '../persistence/indexeddb'
 
 // Import undoRedo to ensure enablePatches() is called before store creation
 import './undoRedo'
@@ -24,11 +25,18 @@ function getNextBoneName(bones: Record<string, Bone>): string {
 
 export type EditorStore = EditorState & {
   // Skeleton actions
-  createBone: (parentId: string | null) => string
+  createBone: (parentId: string | null, length?: number, initialTransform?: Partial<BoneTransform>) => string
   renameBone: (boneId: string, name: string) => void
   deleteBone: (boneId: string) => void
+  deleteBoneSubtree: (boneId: string) => void
   reparentBone: (boneId: string, newParentId: string | null) => void
   setBoneTransform: (boneId: string, transform: Partial<BoneTransform>) => void
+  setBoneTransformSilent: (boneId: string, transform: Partial<BoneTransform>) => void
+  commitTransformDrag: (boneId: string, preDragSkeleton: Skeleton) => void
+  commitMultiTransformDrag: (boneIds: string[], preDragSkeleton: Skeleton) => void
+  commitBoneDrop: (boneId: string, newParentId: string | null, newLocalTransform: Partial<BoneTransform>, preDragSkeleton: Skeleton) => void
+  setBoneLength: (boneId: string, length: number) => void
+  setBoneColor: (boneId: string, color: string, colorAlpha: number) => void
   setBoneVisibility: (boneId: string, visible: boolean) => void
   importImage: (asset: ImageAsset) => void
   attachImage: (attachment: Attachment) => void
@@ -40,12 +48,27 @@ export type EditorStore = EditorState & {
 
   // Editor actions
   setSelectedBone: (id: string | null) => void
+  setPrimarySelectedBone: (id: string) => void
+  toggleBoneSelection: (id: string) => void
+  addBonesToSelection: (ids: string[]) => void
   setHoveredBone: (id: string | null) => void
   setEditorMode: (mode: 'pose' | 'animate') => void
-  setActiveTool: (tool: 'select' | 'move' | 'rotate' | 'scale') => void
+  setActiveTool: (tool: 'select' | 'rotate' | 'scale') => void
   setSnapEnabled: (enabled: boolean) => void
   setGridVisible: (visible: boolean) => void
   setViewport: (patch: Partial<{ x: number; y: number; scale: number }>) => void
+
+  // Project actions
+  newProject: (name: string) => Promise<void>
+  loadProject: (project: Project) => Promise<void>
+  saveCurrentProject: () => Promise<void>
+  deleteProject: (projectId: string) => Promise<void>
+  renameProject: (projectId: string, name: string) => Promise<void>
+  setProjectId: (projectId: string | null) => void
+
+  // Clipboard actions
+  copyBones: () => void
+  pasteBones: () => void
 }
 
 export const useEditorStore = create<EditorStore>()(
@@ -59,17 +82,21 @@ export const useEditorStore = create<EditorStore>()(
 
     // Initial view state
     selectedBoneId: null,
+    selectedBoneIds: [],
     hoveredBoneId: null,
     editorMode: 'pose',
     activeTool: 'select',
     snapEnabled: false,
     snapGridSize: 16,
-    gridVisible: false,
+    gridVisible: true,
     viewport: { x: 0, y: 0, scale: 1 },
+    currentProjectId: null,
+    currentProjectName: null,
+    clipboard: null,
     animations: [],
 
     // Skeleton slice actions
-    createBone: (parentId: string | null) => {
+    createBone: (parentId: string | null, length = 60, initialTransform?: Partial<BoneTransform>) => {
       const boneId = crypto.randomUUID()
       const state = get()
       const boneName = getNextBoneName(state.skeleton.bones)
@@ -82,9 +109,12 @@ export const useEditorStore = create<EditorStore>()(
             name: boneName,
             parentId,
             childIds: [],
-            localTransform: { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1 },
-            bindTransform: { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1 },
+            length,
+            localTransform: { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1, ...initialTransform },
+            bindTransform: { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1, ...initialTransform },
             visible: true,
+            color: '#7c3aed',
+            colorAlpha: 0.85,
           }
 
           draft.bones[boneId] = newBone
@@ -189,6 +219,50 @@ export const useEditorStore = create<EditorStore>()(
       })
     },
 
+    deleteBoneSubtree: (boneId: string) => {
+      const state = get()
+      const { next: newSkeleton, undoStack: newUndo, redoStack: newRedo } = withUndo(
+        state.skeleton,
+        (draft: Skeleton) => {
+          const bone = draft.bones[boneId]
+          if (!bone) return
+
+          // Collect the full subtree (BFS)
+          const toDelete = new Set<string>()
+          const queue = [boneId]
+          while (queue.length > 0) {
+            const id = queue.pop()!
+            toDelete.add(id)
+            const b = draft.bones[id]
+            if (b) queue.push(...b.childIds)
+          }
+
+          // Detach root of subtree from its parent / rootBoneIds
+          if (bone.parentId) {
+            const parent = draft.bones[bone.parentId]
+            if (parent) {
+              parent.childIds = parent.childIds.filter(id => id !== boneId)
+            }
+          } else {
+            draft.rootBoneIds = draft.rootBoneIds.filter(id => id !== boneId)
+          }
+
+          // Delete every bone in the subtree
+          for (const id of toDelete) {
+            delete draft.bones[id]
+          }
+        },
+        state.undoStack,
+        state.redoStack
+      )
+
+      set((state) => {
+        state.skeleton = newSkeleton
+        state.undoStack = newUndo
+        state.redoStack = newRedo
+      })
+    },
+
     reparentBone: (boneId: string, newParentId: string | null) => {
       const state = get()
       const { next: newSkeleton, undoStack: newUndo, redoStack: newRedo } = withUndo(
@@ -249,6 +323,146 @@ export const useEditorStore = create<EditorStore>()(
           // Update bindTransform when in pose mode
           if (state.editorMode === 'pose') {
             Object.assign(bone.bindTransform, transform)
+          }
+        },
+        state.undoStack,
+        state.redoStack
+      )
+
+      set((state) => {
+        state.skeleton = newSkeleton
+        state.undoStack = newUndo
+        state.redoStack = newRedo
+      })
+    },
+
+    // Live update during drag — no undo entry pushed
+    setBoneTransformSilent: (boneId: string, transform: Partial<BoneTransform>) => {
+      set((state) => {
+        const bone = state.skeleton.bones[boneId]
+        if (!bone) return
+        Object.assign(bone.localTransform, transform)
+        if (state.editorMode === 'pose') {
+          Object.assign(bone.bindTransform, transform)
+        }
+      })
+    },
+
+    // Commit any transform drag as a single undo entry using a pre-drag skeleton snapshot.
+    // Handles x/y (bone drag), rotation (rotate gizmo), and scaleX/scaleY (scale gizmo).
+    commitTransformDrag: (boneId: string, preDragSkeleton: Skeleton) => {
+      const state = get()
+      const currentBone = state.skeleton.bones[boneId]
+      if (!currentBone) return
+
+      const final = currentBone.localTransform
+      const preDragBone = preDragSkeleton.bones[boneId]
+
+      // Skip if nothing changed (click without drag)
+      if (preDragBone) {
+        const p = preDragBone.localTransform
+        if (p.x === final.x && p.y === final.y && p.rotation === final.rotation &&
+            p.scaleX === final.scaleX && p.scaleY === final.scaleY) {
+          return
+        }
+      }
+
+      const finalTransform = { ...final }
+      const editorMode = state.editorMode
+      const { next, undoStack: newUndo, redoStack: newRedo } = withUndo(
+        preDragSkeleton,
+        (draft: Skeleton) => {
+          const bone = draft.bones[boneId]
+          if (bone) {
+            Object.assign(bone.localTransform, finalTransform)
+            if (editorMode === 'pose') {
+              Object.assign(bone.bindTransform, finalTransform)
+            }
+          }
+        },
+        state.undoStack,
+        state.redoStack
+      )
+
+      set((state) => {
+        state.skeleton = next
+        state.undoStack = newUndo
+        state.redoStack = newRedo
+      })
+    },
+
+    commitMultiTransformDrag: (boneIds: string[], preDragSkeleton: Skeleton) => {
+      const state = get()
+      const editorMode = state.editorMode
+      const finalTransforms: Record<string, BoneTransform> = {}
+      let anyChanged = false
+      for (const boneId of boneIds) {
+        const currentBone = state.skeleton.bones[boneId]
+        if (!currentBone) continue
+        const preBone = preDragSkeleton.bones[boneId]
+        if (preBone) {
+          const p = preBone.localTransform
+          const f = currentBone.localTransform
+          if (p.x !== f.x || p.y !== f.y || p.rotation !== f.rotation || p.scaleX !== f.scaleX || p.scaleY !== f.scaleY) {
+            anyChanged = true
+          }
+        }
+        finalTransforms[boneId] = { ...currentBone.localTransform }
+      }
+      if (!anyChanged) return
+      const { next, undoStack: newUndo, redoStack: newRedo } = withUndo(
+        preDragSkeleton,
+        (draft: Skeleton) => {
+          for (const [boneId, transform] of Object.entries(finalTransforms)) {
+            const bone = draft.bones[boneId]
+            if (bone) {
+              Object.assign(bone.localTransform, transform)
+              if (editorMode === 'pose') {
+                Object.assign(bone.bindTransform, transform)
+              }
+            }
+          }
+        },
+        state.undoStack,
+        state.redoStack
+      )
+      set((state) => {
+        state.skeleton = next
+        state.undoStack = newUndo
+        state.redoStack = newRedo
+      })
+    },
+
+    setBoneLength: (boneId: string, length: number) => {
+      const state = get()
+      const { next: newSkeleton, undoStack: newUndo, redoStack: newRedo } = withUndo(
+        state.skeleton,
+        (draft: Skeleton) => {
+          const bone = draft.bones[boneId]
+          if (bone) {
+            bone.length = Math.max(0, length)
+          }
+        },
+        state.undoStack,
+        state.redoStack
+      )
+
+      set((state) => {
+        state.skeleton = newSkeleton
+        state.undoStack = newUndo
+        state.redoStack = newRedo
+      })
+    },
+
+    setBoneColor: (boneId: string, color: string, colorAlpha: number) => {
+      const state = get()
+      const { next: newSkeleton, undoStack: newUndo, redoStack: newRedo } = withUndo(
+        state.skeleton,
+        (draft: Skeleton) => {
+          const bone = draft.bones[boneId]
+          if (bone) {
+            bone.color = color
+            bone.colorAlpha = Math.max(0, Math.min(1, colorAlpha))
           }
         },
         state.undoStack,
@@ -358,6 +572,44 @@ export const useEditorStore = create<EditorStore>()(
       })
     },
 
+    commitBoneDrop: (boneId: string, newParentId: string | null, newLocalTransform: Partial<BoneTransform>, preDragSkeleton: Skeleton) => {
+      const state = get()
+      const editorMode = state.editorMode
+      const { next, undoStack: newUndo, redoStack: newRedo } = withUndo(
+        preDragSkeleton,
+        (draft: Skeleton) => {
+          const bone = draft.bones[boneId]
+          if (!bone) return
+          const oldParentId = bone.parentId
+          // Remove from old parent
+          if (oldParentId) {
+            const oldParent = draft.bones[oldParentId]
+            if (oldParent) {
+              const idx = oldParent.childIds.indexOf(boneId)
+              if (idx >= 0) oldParent.childIds.splice(idx, 1)
+            }
+          } else {
+            const idx = draft.rootBoneIds.indexOf(boneId)
+            if (idx >= 0) draft.rootBoneIds.splice(idx, 1)
+          }
+          // Update bone
+          bone.parentId = newParentId
+          Object.assign(bone.localTransform, newLocalTransform)
+          if (editorMode === 'pose') Object.assign(bone.bindTransform, newLocalTransform)
+          // Add to new parent
+          if (newParentId) {
+            const newParent = draft.bones[newParentId]
+            if (newParent) newParent.childIds.push(boneId)
+          } else {
+            draft.rootBoneIds.push(boneId)
+          }
+        },
+        state.undoStack,
+        state.redoStack
+      )
+      set((s) => { s.skeleton = next; s.undoStack = newUndo; s.redoStack = newRedo })
+    },
+
     undo: () => {
       set((state) => {
         const entry: PatchEntry | undefined = state.undoStack.pop()
@@ -392,6 +644,41 @@ export const useEditorStore = create<EditorStore>()(
     setSelectedBone: (id: string | null) => {
       set((state) => {
         state.selectedBoneId = id
+        state.selectedBoneIds = id ? [id] : []
+      })
+    },
+
+    // Updates the primary selected bone without clearing the multi-selection.
+    // Use when clicking an already-selected bone to start a multi-drag.
+    setPrimarySelectedBone: (id: string) => {
+      set((state) => {
+        state.selectedBoneId = id
+      })
+    },
+
+    toggleBoneSelection: (id: string) => {
+      set((state) => {
+        const idx = state.selectedBoneIds.indexOf(id)
+        if (idx === -1) {
+          state.selectedBoneIds.push(id)
+          state.selectedBoneId = id  // last toggled becomes primary
+        } else {
+          state.selectedBoneIds.splice(idx, 1)
+          // primary becomes last remaining, or null
+          state.selectedBoneId = state.selectedBoneIds[state.selectedBoneIds.length - 1] ?? null
+        }
+      })
+    },
+
+    addBonesToSelection: (ids: string[]) => {
+      set((state) => {
+        const existing = new Set(state.selectedBoneIds)
+        for (const id of ids) {
+          if (!existing.has(id)) state.selectedBoneIds.push(id)
+        }
+        if (ids.length > 0) {
+          state.selectedBoneId = state.selectedBoneIds[state.selectedBoneIds.length - 1] ?? null
+        }
       })
     },
 
@@ -407,7 +694,7 @@ export const useEditorStore = create<EditorStore>()(
       })
     },
 
-    setActiveTool: (tool: 'select' | 'move' | 'rotate' | 'scale') => {
+    setActiveTool: (tool: 'select' | 'rotate' | 'scale') => {
       set((state) => {
         state.activeTool = tool
       })
@@ -428,6 +715,224 @@ export const useEditorStore = create<EditorStore>()(
     setViewport: (patch: Partial<{ x: number; y: number; scale: number }>) => {
       set((state) => {
         Object.assign(state.viewport, patch)
+      })
+    },
+
+    // Project actions
+    setProjectId: (projectId: string | null) => {
+      set((state) => {
+        state.currentProjectId = projectId
+      })
+    },
+
+    newProject: async (name: string) => {
+      const project = await idb.createProject(name)
+      set((state) => {
+        state.currentProjectId = project.id
+        state.currentProjectName = project.name
+        state.skeleton = initialSkeleton()
+        state.imageAssets = {}
+        state.attachments = {}
+        state.undoStack = []
+        state.redoStack = []
+        state.selectedBoneId = null
+        state.selectedBoneIds = []
+        state.hoveredBoneId = null
+        state.viewport = { x: 0, y: 0, scale: 1 }
+      })
+    },
+
+    loadProject: async (project: Project) => {
+      const data = await idb.loadProjectData(project.id)
+      if (data) {
+        set((state) => {
+          state.currentProjectId = project.id
+          state.currentProjectName = project.name
+          state.skeleton = data.skeleton as Skeleton
+          state.imageAssets = data.imageAssets as Record<string, ImageAsset>
+          state.attachments = data.attachments as Record<string, Attachment>
+          state.undoStack = []
+          state.redoStack = []
+          state.selectedBoneId = null
+          state.selectedBoneIds = []
+          state.hoveredBoneId = null
+        })
+      }
+    },
+
+    saveCurrentProject: async () => {
+      const state = get()
+      if (!state.currentProjectId) return
+      await idb.saveProjectData(state.currentProjectId, {
+        skeleton: state.skeleton,
+        imageAssets: state.imageAssets,
+        attachments: state.attachments,
+      })
+    },
+
+    deleteProject: async (projectId: string) => {
+      await idb.deleteProject(projectId)
+      // Also delete associated image buffers
+      const project = await idb.getProject(projectId)
+      if (project) {
+        const imageIds = Object.keys((await idb.loadProjectData(projectId))?.imageAssets || {})
+        await idb.deleteImageBuffers(imageIds)
+      }
+      set((state) => {
+        if (state.currentProjectId === projectId) {
+          state.currentProjectId = null
+          state.currentProjectName = null
+          state.skeleton = initialSkeleton()
+          state.imageAssets = {}
+          state.attachments = {}
+          state.undoStack = []
+          state.redoStack = []
+          state.selectedBoneId = null
+          state.selectedBoneIds = []
+          state.hoveredBoneId = null
+        }
+      })
+    },
+
+    renameProject: async (projectId: string, name: string) => {
+      await idb.updateProject(projectId, { name })
+      // Update currentProjectName if renaming the current project
+      const state = get()
+      if (state.currentProjectId === projectId) {
+        set((state) => {
+          state.currentProjectName = name
+        })
+      }
+    },
+
+    copyBones: () => {
+      const state = get()
+      const selectedId = state.selectedBoneId
+      if (!selectedId) return
+
+      // Collect the bone and all its descendants
+      const bonesToCopy: Bone[] = []
+      const queue = [state.skeleton.bones[selectedId]]
+      const idMap: Record<string, string> = {}
+
+      while (queue.length > 0) {
+        const bone = queue.shift()!
+        if (!bone) continue
+        bonesToCopy.push(bone)
+        idMap[bone.id] = bone.id
+
+        // Add children to queue
+        for (const childId of bone.childIds) {
+          queue.push(state.skeleton.bones[childId])
+        }
+      }
+
+      set((state) => {
+        state.clipboard = {
+          bones: bonesToCopy.map(b => ({
+            id: b.id,
+            name: b.name,
+            parentId: b.parentId,
+            childIds: b.childIds,
+            length: b.length,
+            localTransform: b.localTransform,
+            bindTransform: b.bindTransform,
+            visible: b.visible,
+            color: b.color ?? '#7c3aed',
+            colorAlpha: b.colorAlpha ?? 0.85,
+          })),
+          idMap,
+        }
+      })
+    },
+
+    pasteBones: () => {
+      const state = get()
+      const clipboard = state.clipboard
+      if (!clipboard || clipboard.bones.length === 0) return
+
+      // Generate new IDs and create mapping
+      const newIdMap: Record<string, string> = {}
+      clipboard.bones.forEach(bone => {
+        newIdMap[bone.id] = crypto.randomUUID()
+      })
+
+      // Determine paste offset - paste at viewport center or offset from original
+      // For now, offset by 20 pixels from original positions
+      const pasteOffsetX = 20
+      const pasteOffsetY = 20
+
+      const { next: newSkeleton, undoStack: newUndo, redoStack: newRedo } = withUndo(
+        state.skeleton,
+        (draft: Skeleton) => {
+          // Add all bones with new IDs
+          clipboard.bones.forEach(bone => {
+            const newId = newIdMap[bone.id]
+
+            // Determine new parent ID
+            let newParentId = bone.parentId
+            if (bone.parentId) {
+              // If parent is in the clipboard, use its new ID
+              newParentId = clipboard.idMap[bone.parentId] ? newIdMap[bone.parentId] : bone.parentId
+            }
+
+            // Create new bone
+            const newBone: Bone = {
+              id: newId,
+              name: bone.name,  // Keep original name for now
+              parentId: newParentId,
+              childIds: bone.childIds.map(childId => newIdMap[childId]),
+              length: bone.length,
+              localTransform: {
+                x: bone.localTransform.x + pasteOffsetX,
+                y: bone.localTransform.y + pasteOffsetY,
+                rotation: bone.localTransform.rotation,
+                scaleX: bone.localTransform.scaleX,
+                scaleY: bone.localTransform.scaleY,
+              },
+              bindTransform: {
+                x: bone.bindTransform.x + pasteOffsetX,
+                y: bone.bindTransform.y + pasteOffsetY,
+                rotation: bone.bindTransform.rotation,
+                scaleX: bone.bindTransform.scaleX,
+                scaleY: bone.bindTransform.scaleY,
+              },
+              visible: bone.visible,
+              color: bone.color ?? '#7c3aed',
+              colorAlpha: bone.colorAlpha ?? 0.85,
+            }
+
+            draft.bones[newId] = newBone
+
+            // Update parent's childIds if parent exists (and parent is NOT in clipboard)
+            if (newParentId && bone.parentId && !clipboard.idMap[bone.parentId]) {
+              const parent = draft.bones[newParentId]
+              if (parent) {
+                parent.childIds.push(newId)
+              }
+            }
+
+            // Add to rootBoneIds if it's a root bone
+            if (!newParentId) {
+              draft.rootBoneIds.push(newId)
+            }
+          })
+        },
+        state.undoStack,
+        state.redoStack
+      )
+
+      set((state) => {
+        state.skeleton = newSkeleton
+        state.undoStack = newUndo
+        state.redoStack = newRedo
+        // Select the first pasted bone (the root of the copied hierarchy)
+        if (clipboard.bones.length > 0) {
+          const rootBone = clipboard.bones.find(b => !b.parentId)
+          if (rootBone) {
+            state.selectedBoneId = newIdMap[rootBone.id]
+          }
+        }
       })
     },
   }))

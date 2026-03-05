@@ -1,15 +1,13 @@
 import { useEditorStore } from '../store'
-import { saveProject } from './indexeddb'
+import { saveProjectData } from './indexeddb'
 import type { EditorState } from '../model/types'
 
 /** Serialize document state (exclude view state from save) */
-function serializeDocument(state: EditorState): object {
+function serializeDocument(state: EditorState): { skeleton: object; imageAssets: Record<string, object>; attachments: Record<string, object> } {
   return {
     skeleton: state.skeleton,
     imageAssets: state.imageAssets,      // dataUrl stored here for display; ArrayBuffer stored separately
     attachments: state.attachments,
-    version: 1,                           // schema version for future migrations
-    savedAt: Date.now(),
   }
 }
 
@@ -30,8 +28,11 @@ export function setSaveIndicatorCallback(cb: (saved: boolean) => void): void {
 
 const debouncedSave = debounce(async (state: EditorState) => {
   try {
-    await saveProject(serializeDocument(state))
-    saveIndicatorCallback?.(true)
+    const projectId = state.currentProjectId
+    if (projectId) {
+      await saveProjectData(projectId, serializeDocument(state))
+      saveIndicatorCallback?.(true)
+    }
   } catch (err) {
     console.error('[AutoSave] Failed to save project:', err)
     saveIndicatorCallback?.(false)

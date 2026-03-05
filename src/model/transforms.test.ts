@@ -30,6 +30,9 @@ describe('evaluateWorldTransform', () => {
         ...transform,
       },
       visible: true,
+      length: 60,
+      color: '#7c3aed',
+      colorAlpha: 0.85,
     }
   }
 
@@ -159,6 +162,9 @@ describe('Bone transform structure', () => {
       localTransform: { x: 10, y: 20, rotation: Math.PI / 4, scaleX: 1, scaleY: 1 },
       bindTransform: { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1 },
       visible: true,
+      length: 60,
+      color: '#7c3aed',
+      colorAlpha: 0.85,
     }
 
     expect(bone.localTransform.x).toBe(10)

@@ -1,7 +1,8 @@
 import { useRef, useState, useEffect } from 'react'
 import { useEditorStore } from '../store'
-import { saveImageBuffer } from '../persistence/indexeddb'
+import { saveImageBuffer } from '../persistence'
 import type { ImageAsset, Attachment } from '../model/types'
+import { BonePropertiesPanel } from './BonePropertiesPanel'
 
 // Truncate filename to fit thumbnail area
 function truncateName(name: string, maxLen = 16): string {
@@ -123,7 +124,12 @@ export function Sidebar() {
   }
 
   return (
-    <div className="w-60 bg-gray-800 border-l border-gray-700 flex flex-col h-full">
+    <div className="w-60 bg-gray-800 border-l border-gray-700 flex flex-col h-full overflow-hidden">
+      {/* Bone properties panel */}
+      <div className="overflow-y-auto flex-shrink-0 max-h-[45%]">
+        <BonePropertiesPanel />
+      </div>
+
       {/* Import section */}
       <div className="p-4 border-b border-gray-700">
         <h2 className="text-sm font-semibold text-gray-300 mb-3">Assets</h2>

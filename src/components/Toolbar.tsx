@@ -2,6 +2,14 @@ import { useEditorStore } from '../store'
 
 // Simple SVG icons for the toolbar
 const Icons = {
+  grid: (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="3" width="7" height="7" />
+      <rect x="14" y="3" width="7" height="7" />
+      <rect x="3" y="14" width="7" height="7" />
+      <rect x="14" y="14" width="7" height="7" />
+    </svg>
+  ),
   bone: (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M17 10a3 3 0 0 0-3-3 3 3 0 0 0-3 3v1a3 3 0 0 0 3 3h1a3 3 0 0 0 3-3v-1z" />
@@ -12,19 +20,6 @@ const Icons = {
   select: (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z" />
-    </svg>
-  ),
-  move: (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="2" />
-      <path d="M12 2v4" />
-      <path d="M12 18v4" />
-      <path d="M4.93 4.93l2.83 2.83" />
-      <path d="M16.24 16.24l2.83 2.83" />
-      <path d="M2 12h4" />
-      <path d="M18 12h4" />
-      <path d="M4.93 19.07l2.83-2.83" />
-      <path d="M16.24 7.76l2.83-2.83" />
     </svg>
   ),
   rotate: (
@@ -62,15 +57,18 @@ const Icons = {
   ),
 }
 
-export function Toolbar() {
+export function Toolbar({ onOpenGridSettings }: { onOpenGridSettings: () => void }) {
   const store = useEditorStore
 
   const activeTool = useEditorStore(s => s.activeTool)
   const editorMode = useEditorStore(s => s.editorMode)
   const undoStack = useEditorStore(s => s.undoStack)
   const redoStack = useEditorStore(s => s.redoStack)
+  const currentProjectName = useEditorStore(s => s.currentProjectName)
+  const gridVisible = useEditorStore(s => s.gridVisible)
+  const setGridVisible = useEditorStore(s => s.setGridVisible)
 
-  function handleToolClick(tool: 'select' | 'move' | 'rotate' | 'scale'): void {
+  function handleToolClick(tool: 'select' | 'rotate' | 'scale'): void {
     store.getState().setActiveTool(tool)
   }
 
@@ -94,13 +92,12 @@ export function Toolbar() {
   }
 
   const toolButtons: Array<{
-    tool: 'select' | 'move' | 'rotate' | 'scale'
+    tool: 'select' | 'rotate' | 'scale'
     icon: React.ReactNode
     label: string
     shortcut: string
   }> = [
     { tool: 'select', icon: Icons.select, label: 'Select', shortcut: 'Esc' },
-    { tool: 'move', icon: Icons.move, label: 'Move', shortcut: 'G' },
     { tool: 'rotate', icon: Icons.rotate, label: 'Rotate', shortcut: 'R' },
     { tool: 'scale', icon: Icons.scale, label: 'Scale', shortcut: 'S' },
   ]
@@ -111,6 +108,12 @@ export function Toolbar() {
       <div className="flex items-center gap-2 mr-4">
         <span className="text-amber-500">{Icons.bone}</span>
         <h1 className="text-lg font-bold text-white">BoneForge 2D</h1>
+        {currentProjectName && (
+          <>
+            <span className="text-gray-500">—</span>
+            <span className="text-violet-400 font-medium">{currentProjectName}</span>
+          </>
+        )}
       </div>
 
       {/* Divider */}
@@ -182,6 +185,34 @@ export function Toolbar() {
           title="Redo (Ctrl+Y / Ctrl+Shift+Z)"
         >
           {Icons.redo}
+        </button>
+      </div>
+
+      {/* Divider */}
+      <div className="w-px h-6 bg-gray-700" />
+
+      {/* Grid controls */}
+      <div className="flex items-center gap-1">
+        <button
+          onClick={() => setGridVisible(!gridVisible)}
+          className={`p-1.5 rounded transition-colors ${
+            gridVisible
+              ? 'bg-violet-600 text-white'
+              : 'bg-gray-700 text-gray-400 hover:bg-gray-600'
+          }`}
+          title={gridVisible ? 'Hide Grid' : 'Show Grid'}
+        >
+          {Icons.grid}
+        </button>
+        <button
+          onClick={onOpenGridSettings}
+          className="p-1.5 rounded bg-gray-700 text-gray-200 hover:bg-gray-600 transition-colors"
+          title="Grid Settings (Ctrl+G)"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="3" />
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+          </svg>
         </button>
       </div>
 
