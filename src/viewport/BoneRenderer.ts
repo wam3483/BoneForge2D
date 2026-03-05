@@ -4,6 +4,7 @@ import { Container, Graphics, Text, TextStyle, FederatedPointerEvent } from 'pix
 import { useEditorStore } from '../store'
 import { evaluateWorldTransform } from '../model/transforms'
 import { setAttachmentsContainer } from './AttachmentsRef'
+import { boneDragSource } from './boneCreationState'
 import type { Bone, Skeleton } from '../model/types'
 
 // --- Bone shape drawing ---
@@ -181,9 +182,16 @@ export function BoneRendererLayer() {
         })
         label.eventMode = 'none'
 
-        // Bone selection on click
+        // Bone selection on click; also record drag source so ViewportCamera
+        // can parent a new bone here if the user drags past the threshold.
         g.on('pointerdown', (e: FederatedPointerEvent) => {
           if (e.button === 0) {
+            const state = store.getState()
+            if (state.activeTool === 'select' && state.editorMode === 'pose') {
+              boneDragSource.boneId = bone.id
+              boneDragSource.screenX = e.global.x
+              boneDragSource.screenY = e.global.y
+            }
             store.getState().setSelectedBone(bone.id)
             e.stopPropagation()
           }

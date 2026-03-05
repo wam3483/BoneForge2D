@@ -1,6 +1,8 @@
 import { Container, FederatedPointerEvent, Application, Graphics } from 'pixi.js'
 import { useEditorStore } from '../store'
 import { evaluateWorldTransform } from '../model/transforms'
+import { boneDragSource } from './boneCreationState'
+import type { Skeleton } from '../model/types'
 
 export interface CameraState { x: number; y: number; scale: number }
 
@@ -10,10 +12,14 @@ export class ViewportCamera {
   private isPanning = false
   private lastPanPos = { x: 0, y: 0 }
 
-  // Bone creation drag state
+  // Bone creation state
   private isCreatingBone = false
   private boneCreationStart: { x: number; y: number } | null = null
+  private boneCreationParentId: string | null = null
   private bonePreviewGraphics: Graphics | null = null
+
+  // How many screen pixels the pointer must move before a bone-body press becomes a drag.
+  private readonly DRAG_THRESHOLD_PX = 5
 
   constructor(app: Application) {
     this.app = app
@@ -27,12 +33,12 @@ export class ViewportCamera {
     stage.eventMode = 'static'
     stage.hitArea = this.app.screen
 
-    // Combined pointerdown handler for both panning and bone creation
+    // ── pointerdown (bubble) ─────────────────────────────────────────────────
+    // Only reaches here when no bone or gizmo handle called stopPropagation,
+    // i.e. the user clicked on empty canvas.  For drag-from-bone-body, see the
+    // globalpointermove handler which checks boneDragSource.
     stage.on('pointerdown', (e: FederatedPointerEvent) => {
-      const state = useEditorStore.getState()
-      console.log('ViewportCamera: pointerdown', { button: e.button, target: e.target.name, activeTool: state.activeTool, editorMode: state.editorMode })
-
-      // Middle-click or right-click: pan
+      // Middle / right → pan
       if (e.button === 1 || e.button === 2) {
         this.isPanning = true
         this.lastPanPos = { x: e.global.x, y: e.global.y }
@@ -40,33 +46,50 @@ export class ViewportCamera {
         return
       }
 
-      // Left-click: bone creation (only in select tool, pose mode)
-      if (e.button === 0 && state.activeTool === 'select' && state.editorMode === 'pose') {
-        const worldPos = this.screenToWorld(e.global.x, e.global.y)
-        const parentId = state.selectedBoneId // null = root bone
+      // Left click on empty canvas → start bone creation immediately.
+      // boneDragSource is guaranteed null here because any bone press stops
+      // propagation before this handler runs.
+      if (e.button === 0) {
+        const state = useEditorStore.getState()
+        if (state.activeTool === 'select' && state.editorMode === 'pose') {
+          boneDragSource.boneId = null // ensure clean state for empty-space click
 
-        this.isCreatingBone = true
-        this.boneCreationStart = worldPos
+          const worldPos = this.screenToWorld(e.global.x, e.global.y)
+          const nearbyBoneId = this.findNearestBoneOrigin(worldPos, state.skeleton)
+          this.boneCreationParentId = nearbyBoneId ?? state.selectedBoneId
 
-        // Create preview graphics for drag visualization
-        if (!this.bonePreviewGraphics) {
-          this.bonePreviewGraphics = new Graphics()
-          this.bonePreviewGraphics.zIndex = 1000 // render above other bones
-          this.container.addChild(this.bonePreviewGraphics)
+          this.isCreatingBone = true
+          this.boneCreationStart = worldPos
+          this.ensurePreviewGraphics()
         }
-
-        console.log('ViewportCamera: starting bone creation drag', { worldPos, parentId })
       }
     })
+
+    // ── globalpointermove ────────────────────────────────────────────────────
     stage.on('globalpointermove', (e: FederatedPointerEvent) => {
-      // Handle bone creation preview
+      // Drag-from-bone activation: BoneRenderer set boneDragSource on pointerdown
+      // but stopPropagation prevented the stage bubble handler above from running.
+      // Once the pointer moves past the threshold we commit to bone creation.
+      if (boneDragSource.boneId !== null && !this.isCreatingBone) {
+        const dx = e.global.x - boneDragSource.screenX
+        const dy = e.global.y - boneDragSource.screenY
+        if (Math.hypot(dx, dy) > this.DRAG_THRESHOLD_PX) {
+          this.boneCreationParentId = boneDragSource.boneId
+          this.boneCreationStart = this.screenToWorld(boneDragSource.screenX, boneDragSource.screenY)
+          this.isCreatingBone = true
+          boneDragSource.boneId = null // consumed
+          this.ensurePreviewGraphics()
+        }
+      }
+
+      // Update preview line
       if (this.isCreatingBone && this.boneCreationStart && this.bonePreviewGraphics) {
         const currentWorld = this.screenToWorld(e.global.x, e.global.y)
         this.updateBonePreview(this.boneCreationStart, currentWorld)
         return
       }
 
-      // Handle panning
+      // Pan
       if (!this.isPanning) return
       const dx = e.global.x - this.lastPanPos.x
       const dy = e.global.y - this.lastPanPos.y
@@ -75,8 +98,11 @@ export class ViewportCamera {
       this.lastPanPos = { x: e.global.x, y: e.global.y }
       this.onCameraChange?.()
     })
+
+    // ── pointerup ───────────────────────────────────────────────────────────
     stage.on('pointerup', (e: FederatedPointerEvent) => {
-      // Finalize bone creation
+      boneDragSource.boneId = null // clear regardless
+
       if (this.isCreatingBone && this.boneCreationStart) {
         const endWorld = this.screenToWorld(e.global.x, e.global.y)
         this.finalizeBoneCreation(endWorld)
@@ -84,38 +110,43 @@ export class ViewportCamera {
       }
       this.isPanning = false
     })
+
+    // ── pointerupoutside ─────────────────────────────────────────────────────
     stage.on('pointerupoutside', () => {
-      // Finalize bone creation if dragged outside (cancels the bone)
+      boneDragSource.boneId = null
       if (this.isCreatingBone) {
-        if (this.bonePreviewGraphics) {
-          this.bonePreviewGraphics.clear()
-        }
+        this.bonePreviewGraphics?.clear()
         this.isCreatingBone = false
         this.boneCreationStart = null
+        this.boneCreationParentId = null
         return
       }
       this.isPanning = false
     })
   }
 
+  private ensurePreviewGraphics(): void {
+    if (!this.bonePreviewGraphics) {
+      this.bonePreviewGraphics = new Graphics()
+      this.bonePreviewGraphics.zIndex = 1000
+      this.container.addChild(this.bonePreviewGraphics)
+    }
+  }
+
   private updateBonePreview(start: { x: number; y: number }, end: { x: number; y: number }): void {
     if (!this.bonePreviewGraphics) return
-
     const g = this.bonePreviewGraphics
     g.clear()
 
-    // Draw preview bone (cyan line, different from normal bones)
     g.setStrokeStyle({ width: 2, color: 0x00ffff, alpha: 0.8 })
     g.moveTo(start.x, start.y)
     g.lineTo(end.x, end.y)
     g.stroke()
 
-    // Draw endpoint circle
     g.setFillStyle({ color: 0x00ffff, alpha: 0.8 })
     g.circle(end.x, end.y, 5)
     g.fill()
 
-    // Draw start point (white, brighter than normal bone)
     g.setFillStyle({ color: 0xffffff, alpha: 1 })
     g.circle(start.x, start.y, 4)
     g.fill()
@@ -125,12 +156,10 @@ export class ViewportCamera {
     if (!this.boneCreationStart || !this.bonePreviewGraphics) return
 
     const state = useEditorStore.getState()
-    const parentId = state.selectedBoneId // null = root bone
+    const parentId = this.boneCreationParentId // captured at drag-start
 
-    // Create the actual bone
     const newBoneId = state.createBone(parentId)
 
-    // Place new bone at end position in local space
     if (parentId) {
       const parentWorld = evaluateWorldTransform(parentId, state.skeleton)
       const cos = Math.cos(-parentWorld.rotation)
@@ -144,15 +173,35 @@ export class ViewportCamera {
       useEditorStore.getState().setBoneTransform(newBoneId, { x: endWorld.x, y: endWorld.y })
     }
 
-    // Select new bone
     useEditorStore.getState().setSelectedBone(newBoneId)
 
-    console.log('ViewportCamera: finalized bone creation', { newBoneId, parentId, endWorld })
-
-    // Clear preview
     this.bonePreviewGraphics.clear()
     this.isCreatingBone = false
     this.boneCreationStart = null
+    this.boneCreationParentId = null
+  }
+
+  /** Find the bone whose world origin is closest to worldPos, within a screen-scaled threshold. */
+  private findNearestBoneOrigin(worldPos: { x: number; y: number }, skeleton: Skeleton): string | null {
+    // Use a threshold in screen pixels converted to world units so it stays
+    // consistent regardless of zoom level.
+    const screenThreshold = 20 // px
+    const worldThreshold = screenThreshold / this.container.scale.x
+    let closestId: string | null = null
+    let closestDist = worldThreshold
+    for (const bone of Object.values(skeleton.bones)) {
+      try {
+        const world = evaluateWorldTransform(bone.id, skeleton)
+        const dist = Math.hypot(world.x - worldPos.x, world.y - worldPos.y)
+        if (dist < closestDist) {
+          closestDist = dist
+          closestId = bone.id
+        }
+      } catch {
+        // skip bones with broken transforms
+      }
+    }
+    return closestId
   }
 
   setupWheelZoom(canvas: HTMLCanvasElement): void {
@@ -160,7 +209,6 @@ export class ViewportCamera {
       e.preventDefault()
       const zoomFactor = e.deltaY < 0 ? 1.1 : 0.909
       const newScale = Math.max(0.05, Math.min(20, this.container.scale.x * zoomFactor))
-      // Zoom around pointer position
       const rect = canvas.getBoundingClientRect()
       const px = e.clientX - rect.left
       const py = e.clientY - rect.top
@@ -173,7 +221,6 @@ export class ViewportCamera {
 
   onCameraChange?: () => void
 
-  /** Convert screen coordinates to world (viewport-local) coordinates */
   screenToWorld(screenX: number, screenY: number): { x: number; y: number } {
     const p = this.container.toLocal({ x: screenX, y: screenY })
     return { x: p.x, y: p.y }
