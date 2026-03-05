@@ -1,5 +1,25 @@
 export type EditorMode = 'pose' | 'animate'
 
+export interface Project {
+  id: string
+  name: string
+  lastModified: number  // timestamp
+  thumbnail?: string     // base64 image of the viewport
+}
+
+export interface AppMetadata {
+  lastProjectId: string | null
+}
+
+export interface GridSettings {
+  gridSize: number           // pixels between major grid lines
+  minorLines: number        // minor lines between major lines (0 = none)
+  color: string             // hex color for minor lines
+  colorAlpha: number        // 0-1, minor line alpha
+  majorColor: string        // hex color for major lines
+  majorColorAlpha: number   // 0-1, major line alpha
+}
+
 export interface BoneTransform {
   x: number
   y: number
@@ -13,15 +33,34 @@ export interface Bone {
   name: string                 // mutable display name
   parentId: string | null      // null for root bones
   childIds: string[]           // ordered list of child IDs
+  length: number               // visual length in local units; owned by the bone, not derived from children
   localTransform: BoneTransform  // ONLY stored transform — local space (relative to parent)
   bindTransform: BoneTransform   // rest pose — separate field, immutable once animations exist
   visible: boolean
+  color: string                // hex fill color, e.g. '#7c3aed'
+  colorAlpha: number           // 0–1 fill opacity
 }
 
 export interface Skeleton {
   bones: Record<string, Bone>  // keyed by bone.id
   rootBoneIds: string[]        // top-level bones (parentId === null), ordered
 }
+
+export type BoneClipboard = {
+  bones: Array<{
+    id: string
+    name: string
+    parentId: string | null
+    childIds: string[]
+    length: number
+    localTransform: BoneTransform
+    bindTransform: BoneTransform
+    visible: boolean
+    color: string
+    colorAlpha: number
+  }>
+  idMap: Record<string, string>  // Maps old IDs to new IDs for pasting
+} | null
 
 export interface ImageAsset {
   id: string
@@ -53,13 +92,19 @@ export interface EditorState {
   redoStack: Array<{ inverse: import('immer').Patch[]; forward: import('immer').Patch[] }>
   // View state (NOT in undo stack)
   selectedBoneId: string | null
+  selectedBoneIds: string[]
   hoveredBoneId: string | null
   editorMode: EditorMode
-  activeTool: 'select' | 'move' | 'rotate' | 'scale'
+  activeTool: 'select' | 'rotate' | 'scale'
   snapEnabled: boolean
   snapGridSize: number    // pixels, default 16
   gridVisible: boolean
   viewport: { x: number; y: number; scale: number }
+  // Project state
+  currentProjectId: string | null
+  currentProjectName: string | null
+  // Clipboard
+  clipboard: BoneClipboard
   // Phase 2 forward-compat slot (empty in Phase 1)
   animations: unknown[]
 }

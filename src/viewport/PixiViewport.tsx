@@ -35,15 +35,9 @@ export function PixiViewport() {
       switch (key) {
         case 'b': // Create root bone at viewport center
           const newBoneId = state.createBone(null)
-          // Place at center of viewport
-          store.getState().setBoneTransform(newBoneId, { x: 0, y: 0 })
+          // Place at center of viewport — silent so creation + position = one undo step
+          store.getState().setBoneTransformSilent(newBoneId, { x: 0, y: 0 })
           store.getState().setSelectedBone(newBoneId)
-          store.getState().setActiveTool('move')
-          e.preventDefault()
-          break
-
-        case 'g': // Move tool
-          store.getState().setActiveTool('move')
           e.preventDefault()
           break
 
@@ -64,9 +58,15 @@ export function PixiViewport() {
           break
 
         case 'delete':
-        case 'backspace': // Delete selected bone
+        case 'backspace':
           if (state.selectedBoneId) {
-            state.deleteBone(state.selectedBoneId)
+            if (e.shiftKey) {
+              // Shift+Delete: remove bone only, promote children to grandparent
+              state.deleteBone(state.selectedBoneId)
+            } else {
+              // Delete: remove bone and all descendants
+              state.deleteBoneSubtree(state.selectedBoneId)
+            }
             store.getState().setSelectedBone(null)
             e.preventDefault()
           }

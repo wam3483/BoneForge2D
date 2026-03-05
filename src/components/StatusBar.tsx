@@ -97,7 +97,7 @@ export function StatusBar() {
 
       {/* Keyboard legend */}
       <div className="text-[10px] text-gray-500">
-        B:Bone G:Move R:Rotate S:Scale Tab:Mode Del:Delete Ctrl+Z:Undo
+        B:Bone R:Rotate S:Scale Tab:Mode Del:Delete Ctrl+C/V:Copy/Paste Ctrl+Drag:Axis Lock
       </div>
     </div>
   )
