@@ -82,11 +82,50 @@ export interface Attachment {
   zOrder: number      // draw order; higher renders on top
 }
 
+
+// --- Animation types ---
+
+export type InterpolationType =
+  | 'constant'   // hold value until next keyframe
+  | 'linear'     // simple LERP
+  | 'easeInQuad' | 'easeOutQuad' | 'easeInOutQuad'
+  | 'easeInCubic' | 'easeOutCubic' | 'easeInOutCubic'
+  | 'bezier'     // custom cubic bezier
+
+export type AnimatedProperty = 'x' | 'y' | 'rotation' | 'scaleX' | 'scaleY'
+
+export interface Keyframe {
+  time: number           // seconds
+  value: number
+  interpolation: InterpolationType
+  bezier?: {
+    controlIn: number // only for bezier, -1 to 1
+    controlOut: number // only for bezier, -1 to 1
+  }
+}
+
+export interface AnimationChannel {
+  boneId: string
+  property: AnimatedProperty
+  keyframes: Keyframe[]    // sorted by time
+}
+
+export interface Animation {
+  id: string
+  name: string
+  duration: number         // seconds
+  loop: boolean
+  channels: AnimationChannel[]
+}
+
+// --- Editor state ---
+
 export interface EditorState {
   // Document state (all mutations go through undo/redo)
   skeleton: Skeleton
   imageAssets: Record<string, ImageAsset>
   attachments: Record<string, Attachment>
+  animations: Record<string, Animation>
   // Undo/redo stacks (Immer patches)
   undoStack: Array<{ inverse: import('immer').Patch[]; forward: import('immer').Patch[] }>
   redoStack: Array<{ inverse: import('immer').Patch[]; forward: import('immer').Patch[] }>
@@ -100,11 +139,13 @@ export interface EditorState {
   snapGridSize: number    // pixels, default 16
   gridVisible: boolean
   viewport: { x: number; y: number; scale: number }
+  // Animation playback state
+  currentAnimationId: string | null
+  currentTime: number      // seconds
+  isPlaying: boolean
   // Project state
   currentProjectId: string | null
   currentProjectName: string | null
   // Clipboard
   clipboard: BoneClipboard
-  // Phase 2 forward-compat slot (empty in Phase 1)
-  animations: unknown[]
 }

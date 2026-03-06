@@ -3,8 +3,7 @@
     "allow": [
       "Bash(node:*)",
       "WebSearch",
-      "Bash(npx tsc:*)",
-      "Bash(curl:*)"
+      "Bash(npx tsc:*)"
     ]
   }
 }

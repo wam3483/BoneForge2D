@@ -93,7 +93,10 @@ export const useEditorStore = create<EditorStore>()(
     currentProjectId: null,
     currentProjectName: null,
     clipboard: null,
-    animations: [],
+    currentAnimationId: null,
+    currentTime: 0,
+    isPlaying: false,
+    animations: {},
 
     // Skeleton slice actions
     createBone: (parentId: string | null, length = 60, initialTransform?: Partial<BoneTransform>) => {
