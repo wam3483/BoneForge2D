@@ -88,8 +88,29 @@ export interface Attachment {
 export type InterpolationType =
   | 'constant'   // hold value until next keyframe
   | 'linear'     // simple LERP
+  // Polynomial — quadratic (pow2)
   | 'easeInQuad' | 'easeOutQuad' | 'easeInOutQuad'
+  // Polynomial — cubic (pow3)
   | 'easeInCubic' | 'easeOutCubic' | 'easeInOutCubic'
+  // Polynomial — quartic (pow4)
+  | 'pow4In' | 'pow4Out' | 'pow4'
+  // Polynomial — quintic (pow5)
+  | 'pow5In' | 'pow5Out' | 'pow5'
+  // Sine
+  | 'sineIn' | 'sineOut' | 'sine'
+  // Circle
+  | 'circleIn' | 'circleOut' | 'circle'
+  // Exponential (base 2, power ×5 and ×10 — exp5 / exp10)
+  | 'exp5In' | 'exp5Out' | 'exp5'
+  | 'exp10In' | 'exp10Out' | 'exp10'
+  // Elastic (spring overshoot)
+  | 'elasticIn' | 'elasticOut' | 'elastic'
+  // Bounce (ball-drop)
+  | 'bounceIn' | 'bounceOut' | 'bounce'
+  // Swing (slight overshoot, scale=1.5)
+  | 'swingIn' | 'swingOut' | 'swing'
+  // Smooth (smoothstep variants — smooth / smooth2 / smoother)
+  | 'smooth' | 'smooth2' | 'smoother'
   | 'bezier'     // custom cubic bezier
 
 export type AnimatedProperty = 'x' | 'y' | 'rotation' | 'scaleX' | 'scaleY'

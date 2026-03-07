@@ -81,6 +81,15 @@ function sampleChannel(keyframes: Keyframe[], time: number): number {
   return interpolateKeyframes(kf0, kf1, t)
 }
 
+// bounce-out helper (standard 4-segment formula)
+function bounceOut(t: number): number {
+  const n = 7.5625, d = 2.75
+  if (t < 1 / d)        return n * t * t
+  if (t < 2 / d)        { t -= 1.5 / d;   return n * t * t + 0.75 }
+  if (t < 2.5 / d)      { t -= 2.25 / d;  return n * t * t + 0.9375 }
+  t -= 2.625 / d;       return n * t * t + 0.984375
+}
+
 function interpolateKeyframes(kf0: Keyframe, kf1: Keyframe, t: number): number {
   const v0 = kf0.value
   const v1 = kf1.value
@@ -93,6 +102,7 @@ function interpolateKeyframes(kf0: Keyframe, kf1: Keyframe, t: number): number {
     case 'linear':
       return v0 + dv * t
 
+    // ── Polynomial — quadratic ────────────────────────────────────────────
     case 'easeInQuad':
       return v0 + dv * t * t
 
@@ -104,12 +114,13 @@ function interpolateKeyframes(kf0: Keyframe, kf1: Keyframe, t: number): number {
       return v0 + dv * e
     }
 
+    // ── Polynomial — cubic ────────────────────────────────────────────────
     case 'easeInCubic':
       return v0 + dv * t * t * t
 
     case 'easeOutCubic': {
-      const inv = 1 - t
-      return v0 + dv * (1 - inv * inv * inv)
+      const u = 1 - t
+      return v0 + dv * (1 - u * u * u)
     }
 
     case 'easeInOutCubic': {
@@ -117,6 +128,165 @@ function interpolateKeyframes(kf0: Keyframe, kf1: Keyframe, t: number): number {
       return v0 + dv * e
     }
 
+    // ── Polynomial — quartic (pow4) ────────────────────────────────
+    case 'pow4In':
+      return v0 + dv * t * t * t * t
+
+    case 'pow4Out': {
+      const u = 1 - t
+      return v0 + dv * (1 - u * u * u * u)
+    }
+
+    case 'pow4': {
+      const e = t < 0.5
+        ? Math.pow(2 * t, 4) / 2
+        : Math.pow((t - 1) * 2, 4) / -2 + 1
+      return v0 + dv * e
+    }
+
+    // ── Polynomial — quintic (pow5) ────────────────────────────────
+    case 'pow5In':
+      return v0 + dv * t * t * t * t * t
+
+    case 'pow5Out': {
+      const u = 1 - t
+      return v0 + dv * (1 - u * u * u * u * u)
+    }
+
+    case 'pow5': {
+      const e = t < 0.5
+        ? Math.pow(2 * t, 5) / 2
+        : Math.pow((t - 1) * 2, 5) / 2 + 1
+      return v0 + dv * e
+    }
+
+    // ── Sine (sine / sineIn / sineOut) ────────────────────────────
+    case 'sineIn':
+      return v0 + dv * (1 - Math.cos(t * Math.PI / 2))
+
+    case 'sineOut':
+      return v0 + dv * Math.sin(t * Math.PI / 2)
+
+    case 'sine':
+      return v0 + dv * ((1 - Math.cos(t * Math.PI)) / 2)
+
+    // ── Circle (circle / circleIn / circleOut) ────────────────────
+    case 'circleIn':
+      return v0 + dv * (1 - Math.sqrt(1 - t * t))
+
+    case 'circleOut': {
+      const u = t - 1
+      return v0 + dv * Math.sqrt(1 - u * u)
+    }
+
+    case 'circle': {
+      const e = t < 0.5
+        ? (1 - Math.sqrt(1 - (2 * t) * (2 * t))) / 2
+        : (Math.sqrt(1 - (2 * t - 2) * (2 * t - 2)) + 1) / 2
+      return v0 + dv * e
+    }
+
+    // ── Exponential ×5 (exp5 — base 2, power 5) ───────────────────
+    case 'exp5In': {
+      const min = Math.pow(2, -5), sc = 1 / (1 - min)
+      return v0 + dv * (Math.pow(2, 5 * (t - 1)) - min) * sc
+    }
+    case 'exp5Out': {
+      const min = Math.pow(2, -5), sc = 1 / (1 - min)
+      return v0 + dv * (1 - (Math.pow(2, -5 * t) - min) * sc)
+    }
+    case 'exp5': {
+      const min = Math.pow(2, -5), sc = 1 / (1 - min)
+      const e = t <= 0.5
+        ? (Math.pow(2, 5 * (2 * t - 1)) - min) * sc / 2
+        : (2 - (Math.pow(2, -5 * (2 * t - 1)) - min) * sc) / 2
+      return v0 + dv * e
+    }
+
+    // ── Exponential ×10 (exp10 — base 2, power 10) ────────────────
+    case 'exp10In': {
+      const min = Math.pow(2, -10), sc = 1 / (1 - min)
+      return v0 + dv * (Math.pow(2, 10 * (t - 1)) - min) * sc
+    }
+    case 'exp10Out': {
+      const min = Math.pow(2, -10), sc = 1 / (1 - min)
+      return v0 + dv * (1 - (Math.pow(2, -10 * t) - min) * sc)
+    }
+    case 'exp10': {
+      const min = Math.pow(2, -10), sc = 1 / (1 - min)
+      const e = t <= 0.5
+        ? (Math.pow(2, 10 * (2 * t - 1)) - min) * sc / 2
+        : (2 - (Math.pow(2, -10 * (2 * t - 1)) - min) * sc) / 2
+      return v0 + dv * e
+    }
+
+    // ── Elastic (spring overshoot) ────────────────────────────────────────
+    case 'elasticIn': {
+      if (t === 0) return v0
+      if (t === 1) return v0 + dv
+      const c = (2 * Math.PI) / 3
+      return v0 + dv * (-Math.pow(2, 10 * t - 10) * Math.sin((10 * t - 10.75) * c))
+    }
+    case 'elasticOut': {
+      if (t === 0) return v0
+      if (t === 1) return v0 + dv
+      const c = (2 * Math.PI) / 3
+      return v0 + dv * (Math.pow(2, -10 * t) * Math.sin((10 * t - 0.75) * c) + 1)
+    }
+    case 'elastic': {
+      if (t === 0) return v0
+      if (t === 1) return v0 + dv
+      const c = (2 * Math.PI) / 4.5
+      const e = t < 0.5
+        ? -(Math.pow(2, 20 * t - 10) * Math.sin((20 * t - 11.125) * c)) / 2
+        : (Math.pow(2, -20 * t + 10) * Math.sin((20 * t - 11.125) * c)) / 2 + 1
+      return v0 + dv * e
+    }
+
+    // ── Bounce (ball-drop) ────────────────────────────────────────────────
+    case 'bounceOut':
+      return v0 + dv * bounceOut(t)
+
+    case 'bounceIn':
+      return v0 + dv * (1 - bounceOut(1 - t))
+
+    case 'bounce': {
+      const e = t < 0.5
+        ? (1 - bounceOut(1 - 2 * t)) / 2
+        : (bounceOut(2 * t - 1) + 1) / 2
+      return v0 + dv * e
+    }
+
+    // ── Swing (overshoot, scale=1.5) ──────────────────────────────
+    case 'swingIn': {
+      const s = 1.5
+      return v0 + dv * (t * t * ((s + 1) * t - s))
+    }
+    case 'swingOut': {
+      const s = 1.5, u = t - 1
+      return v0 + dv * (u * u * ((s + 1) * u + s) + 1)
+    }
+    case 'swing': {
+      const s = 3.0 // doubles scale for InOut
+      const e = t <= 0.5
+        ? (() => { const a = 2 * t; return a * a * ((s + 1) * a - s) / 2 })()
+        : (() => { const a = 2 * t - 2; return a * a * ((s + 1) * a + s) / 2 + 1 })()
+      return v0 + dv * e
+    }
+
+    // ── Smooth (smooth / smooth2 / smoother) ───────────────────────
+    case 'smooth':
+      return v0 + dv * (t * t * (3 - 2 * t))
+
+    case 'smooth2': {
+      const s = t * t * (3 - 2 * t)
+      return v0 + dv * (s * s * (3 - 2 * s))
+    }
+
+    case 'smoother':
+      return v0 + dv * (t * t * t * (t * (6 * t - 15) + 10))
+
+    // ── Bezier ────────────────────────────────────────────────────────────
     case 'bezier': {
       // 1D cubic bezier. Control points defined as offsets relative to the value range.
       // controlOut on kf0: tangent leaving kf0; controlIn on kf1: tangent arriving kf1.
