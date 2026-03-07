@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
-import type { EditorState, Skeleton, ImageAsset, Attachment, Bone, BoneTransform, Project } from '../model/types'
+import type { EditorState, Skeleton, ImageAsset, Attachment, Bone, BoneTransform, Project, Animation, AnimatedProperty, Keyframe } from '../model/types'
 import { withUndo, applyPatches } from './undoRedo'
 import type { PatchEntry } from './undoRedo'
 import * as idb from '../persistence/indexeddb'
@@ -65,6 +65,20 @@ export type EditorStore = EditorState & {
   deleteProject: (projectId: string) => Promise<void>
   renameProject: (projectId: string, name: string) => Promise<void>
   setProjectId: (projectId: string | null) => void
+
+  // Animation document actions (undo/redo)
+  createAnimation: (name: string, duration: number) => string
+  deleteAnimation: (animationId: string) => void
+  updateAnimation: (animationId: string, patch: { name?: string; duration?: number; loop?: boolean }) => void
+  addKeyframe: (animationId: string, boneId: string, property: AnimatedProperty, keyframe: Omit<Keyframe, 'time'>) => void
+  updateKeyframe: (animationId: string, boneId: string, property: AnimatedProperty, keyframeIndex: number, patch: Partial<Omit<Keyframe, 'time'>>) => void
+  deleteKeyframe: (animationId: string, boneId: string, property: AnimatedProperty, keyframeIndex: number) => void
+
+  // Animation playback state (no undo)
+  setCurrentAnimation: (animationId: string | null) => void
+  setPlaybackTime: (time: number) => void
+  togglePlayback: () => void
+  setPlaybackState: (playing: boolean, time: number) => void
 
   // Clipboard actions
   copyBones: () => void
@@ -618,7 +632,11 @@ export const useEditorStore = create<EditorStore>()(
         const entry: PatchEntry | undefined = state.undoStack.pop()
         if (!entry) return
 
-        state.skeleton = applyPatches(state.skeleton as any, entry.inverse) as Skeleton
+        if ((entry.slice ?? 'skeleton') === 'animations') {
+          state.animations = applyPatches(state.animations as any, entry.inverse) as Record<string, Animation>
+        } else {
+          state.skeleton = applyPatches(state.skeleton as any, entry.inverse) as Skeleton
+        }
         state.redoStack.push(entry)
       })
     },
@@ -628,16 +646,21 @@ export const useEditorStore = create<EditorStore>()(
         const entry: PatchEntry | undefined = state.redoStack.pop()
         if (!entry) return
 
-        state.skeleton = applyPatches(state.skeleton as any, entry.forward) as Skeleton
+        if ((entry.slice ?? 'skeleton') === 'animations') {
+          state.animations = applyPatches(state.animations as any, entry.forward) as Record<string, Animation>
+        } else {
+          state.skeleton = applyPatches(state.skeleton as any, entry.forward) as Skeleton
+        }
         state.undoStack.push(entry)
       })
     },
 
-    restoreSession: (doc: { skeleton: Skeleton; imageAssets: Record<string, ImageAsset>; attachments: Record<string, Attachment> }) => {
+    restoreSession: (doc: { skeleton: Skeleton; imageAssets: Record<string, ImageAsset>; attachments: Record<string, Attachment>; animations?: Record<string, Animation> }) => {
       set((state) => {
         state.skeleton = doc.skeleton
         state.imageAssets = doc.imageAssets
         state.attachments = doc.attachments
+        state.animations = doc.animations ?? {}
         state.undoStack = []
         state.redoStack = []
       })
@@ -736,12 +759,16 @@ export const useEditorStore = create<EditorStore>()(
         state.skeleton = initialSkeleton()
         state.imageAssets = {}
         state.attachments = {}
+        state.animations = {}
         state.undoStack = []
         state.redoStack = []
         state.selectedBoneId = null
         state.selectedBoneIds = []
         state.hoveredBoneId = null
         state.viewport = { x: 0, y: 0, scale: 1 }
+        state.currentAnimationId = null
+        state.currentTime = 0
+        state.isPlaying = false
       })
     },
 
@@ -754,11 +781,15 @@ export const useEditorStore = create<EditorStore>()(
           state.skeleton = data.skeleton as Skeleton
           state.imageAssets = data.imageAssets as Record<string, ImageAsset>
           state.attachments = data.attachments as Record<string, Attachment>
+          state.animations = (data.animations ?? {}) as Record<string, Animation>
           state.undoStack = []
           state.redoStack = []
           state.selectedBoneId = null
           state.selectedBoneIds = []
           state.hoveredBoneId = null
+          state.currentAnimationId = null
+          state.currentTime = 0
+          state.isPlaying = false
         })
       }
     },
@@ -770,6 +801,7 @@ export const useEditorStore = create<EditorStore>()(
         skeleton: state.skeleton,
         imageAssets: state.imageAssets,
         attachments: state.attachments,
+        animations: state.animations,
       })
     },
 
@@ -847,6 +879,184 @@ export const useEditorStore = create<EditorStore>()(
           idMap,
         }
       })
+    },
+
+    // --- Animation document actions ---
+
+    createAnimation: (name: string, duration: number) => {
+      const animId = crypto.randomUUID()
+      const state = get()
+      const { next: newAnimations, undoStack: newUndo, redoStack: newRedo } = withUndo(
+        state.animations,
+        (draft: Record<string, Animation>) => {
+          draft[animId] = { id: animId, name, duration, loop: true, channels: [] }
+        },
+        state.undoStack,
+        state.redoStack,
+        'animations'
+      )
+      set((s) => {
+        s.animations = newAnimations
+        s.undoStack = newUndo
+        s.redoStack = newRedo
+        s.currentAnimationId = animId
+        s.currentTime = 0
+        s.isPlaying = false
+      })
+      return animId
+    },
+
+    deleteAnimation: (animationId: string) => {
+      const state = get()
+      const { next: newAnimations, undoStack: newUndo, redoStack: newRedo } = withUndo(
+        state.animations,
+        (draft: Record<string, Animation>) => {
+          delete draft[animationId]
+        },
+        state.undoStack,
+        state.redoStack,
+        'animations'
+      )
+      set((s) => {
+        s.animations = newAnimations
+        s.undoStack = newUndo
+        s.redoStack = newRedo
+        if (s.currentAnimationId === animationId) {
+          const remaining = Object.keys(newAnimations)
+          s.currentAnimationId = remaining[0] ?? null
+          s.currentTime = 0
+          s.isPlaying = false
+        }
+      })
+    },
+
+    updateAnimation: (animationId: string, patch: { name?: string; duration?: number; loop?: boolean }) => {
+      const state = get()
+      const { next: newAnimations, undoStack: newUndo, redoStack: newRedo } = withUndo(
+        state.animations,
+        (draft: Record<string, Animation>) => {
+          const anim = draft[animationId]
+          if (anim) Object.assign(anim, patch)
+        },
+        state.undoStack,
+        state.redoStack,
+        'animations'
+      )
+      set((s) => {
+        s.animations = newAnimations
+        s.undoStack = newUndo
+        s.redoStack = newRedo
+      })
+    },
+
+    addKeyframe: (animationId: string, boneId: string, property: AnimatedProperty, keyframe: Omit<Keyframe, 'time'>) => {
+      const state = get()
+      const time = state.currentTime
+      const { next: newAnimations, undoStack: newUndo, redoStack: newRedo } = withUndo(
+        state.animations,
+        (draft: Record<string, Animation>) => {
+          const anim = draft[animationId]
+          if (!anim) return
+
+          let channel = anim.channels.find(c => c.boneId === boneId && c.property === property)
+          if (!channel) {
+            channel = { boneId, property, keyframes: [] }
+            anim.channels.push(channel)
+          }
+
+          const existingIdx = channel.keyframes.findIndex(kf => kf.time === time)
+          const newKf = { time, ...keyframe }
+          if (existingIdx >= 0) {
+            channel.keyframes[existingIdx] = newKf
+          } else {
+            const insertIdx = channel.keyframes.findIndex(kf => kf.time > time)
+            if (insertIdx === -1) {
+              channel.keyframes.push(newKf)
+            } else {
+              channel.keyframes.splice(insertIdx, 0, newKf)
+            }
+          }
+        },
+        state.undoStack,
+        state.redoStack,
+        'animations'
+      )
+      set((s) => {
+        s.animations = newAnimations
+        s.undoStack = newUndo
+        s.redoStack = newRedo
+      })
+    },
+
+    updateKeyframe: (animationId: string, boneId: string, property: AnimatedProperty, keyframeIndex: number, patch: Partial<Omit<Keyframe, 'time'>>) => {
+      const state = get()
+      const { next: newAnimations, undoStack: newUndo, redoStack: newRedo } = withUndo(
+        state.animations,
+        (draft: Record<string, Animation>) => {
+          const anim = draft[animationId]
+          if (!anim) return
+          const channel = anim.channels.find(c => c.boneId === boneId && c.property === property)
+          if (!channel) return
+          const kf = channel.keyframes[keyframeIndex]
+          if (kf) Object.assign(kf, patch)
+        },
+        state.undoStack,
+        state.redoStack,
+        'animations'
+      )
+      set((s) => {
+        s.animations = newAnimations
+        s.undoStack = newUndo
+        s.redoStack = newRedo
+      })
+    },
+
+    deleteKeyframe: (animationId: string, boneId: string, property: AnimatedProperty, keyframeIndex: number) => {
+      const state = get()
+      const { next: newAnimations, undoStack: newUndo, redoStack: newRedo } = withUndo(
+        state.animations,
+        (draft: Record<string, Animation>) => {
+          const anim = draft[animationId]
+          if (!anim) return
+          const channelIdx = anim.channels.findIndex(c => c.boneId === boneId && c.property === property)
+          if (channelIdx === -1) return
+          const channel = anim.channels[channelIdx]
+          channel.keyframes.splice(keyframeIndex, 1)
+          if (channel.keyframes.length === 0) {
+            anim.channels.splice(channelIdx, 1)
+          }
+        },
+        state.undoStack,
+        state.redoStack,
+        'animations'
+      )
+      set((s) => {
+        s.animations = newAnimations
+        s.undoStack = newUndo
+        s.redoStack = newRedo
+      })
+    },
+
+    // --- Animation playback state (no undo) ---
+
+    setCurrentAnimation: (animationId: string | null) => {
+      set((s) => {
+        s.currentAnimationId = animationId
+        s.currentTime = 0
+        s.isPlaying = false
+      })
+    },
+
+    setPlaybackTime: (time: number) => {
+      set((s) => { s.currentTime = time })
+    },
+
+    togglePlayback: () => {
+      set((s) => { s.isPlaying = !s.isPlaying })
+    },
+
+    setPlaybackState: (playing: boolean, time: number) => {
+      set((s) => { s.isPlaying = playing; s.currentTime = time })
     },
 
     pasteBones: () => {

@@ -6,13 +6,15 @@ import { Toolbar } from './components/Toolbar'
 import { StatusBar } from './components/StatusBar'
 import { ProjectManager } from './components/ProjectManager'
 import { GridSettingsModal } from './components/GridSettingsModal'
+import { TimelinePanel } from './components/TimelinePanel'
 import { useEditorStore } from './store'
 import { initAutoSave, setSaveIndicatorCallback } from './persistence/autoSave'
 import * as idb from './persistence'
 
 export default function App() {
-  const undo = useEditorStore(s => s.undo)
-  const redo = useEditorStore(s => s.redo)
+  const undo           = useEditorStore(s => s.undo)
+  const redo           = useEditorStore(s => s.redo)
+  const togglePlayback = useEditorStore(s => s.togglePlayback)
   const loadProject = useEditorStore(s => s.loadProject)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saved' | 'error'>('idle')
   const [showProjectManager, setShowProjectManager] = useState(false)
@@ -97,12 +99,18 @@ export default function App() {
       } else if (e.ctrlKey && e.key === 'g') {
         e.preventDefault()
         setShowGridSettings(true)
+      } else if (e.code === 'Space' && !e.ctrlKey && !e.shiftKey && !e.altKey) {
+        const tag = (e.target as HTMLElement).tagName
+        if (tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT') {
+          e.preventDefault()
+          togglePlayback()
+        }
       }
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [undo, redo])
+  }, [undo, redo, togglePlayback])
 
   return (
     <div className="h-screen flex flex-col bg-[var(--color-viewport-bg)] text-white overflow-hidden">
@@ -144,6 +152,9 @@ export default function App() {
         {/* Right sidebar with image import and attachment controls */}
         <Sidebar />
       </div>
+
+      {/* Timeline panel */}
+      <TimelinePanel />
 
       {/* Bottom status bar */}
       <StatusBar />

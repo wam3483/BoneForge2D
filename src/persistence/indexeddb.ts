@@ -114,6 +114,7 @@ export async function saveProjectData(projectId: string, data: {
   skeleton: object
   imageAssets: Record<string, object>
   attachments: Record<string, object>
+  animations: Record<string, object>
 }): Promise<void> {
   const db = await openDB()
   return new Promise((resolve, reject) => {
@@ -137,6 +138,7 @@ export async function loadProjectData(projectId: string): Promise<{
   skeleton: object
   imageAssets: Record<string, object>
   attachments: Record<string, object>
+  animations: Record<string, object>
 } | null> {
   const db = await openDB()
   return new Promise((resolve, reject) => {
@@ -149,6 +151,7 @@ export async function loadProjectData(projectId: string): Promise<{
           skeleton: result.skeleton,
           imageAssets: result.imageAssets || {},
           attachments: result.attachments || {},
+          animations: result.animations || {},
         })
       } else {
         resolve(null)
@@ -196,6 +199,7 @@ export async function migrateLegacyProject(): Promise<void> {
           skeleton: req.result.skeleton || {},
           imageAssets: req.result.imageAssets || {},
           attachments: req.result.attachments || {},
+          animations: req.result.animations || {},
         })
         // Delete legacy data
         const delTx = db.transaction([STORE_PROJECTS], 'readwrite')

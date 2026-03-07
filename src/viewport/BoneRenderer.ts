@@ -2,7 +2,8 @@ import { useEffect, useRef } from 'react'
 import { useApplication, useTick } from '@pixi/react'
 import { Container, Graphics, Text, TextStyle, FederatedPointerEvent, Sprite, Texture } from 'pixi.js'
 import { useEditorStore } from '../store'
-import { evaluateWorldTransform } from '../model/transforms'
+import { evaluateWorldTransform, evaluatePose } from '../model/transforms'
+import { setEffectiveSkeleton, setBoneRendererDragId, getDragExcludedIds } from './animationState'
 import { setAttachmentsContainer } from './AttachmentsRef'
 import { useGridSettings } from '../hooks/useGridSettings'
 import type { Bone, Skeleton } from '../model/types'
@@ -184,6 +185,26 @@ function drawConstraintIndicator(
   g.rect(-5, -length - 10, 10, 10)
   g.fill({ color: 0x44ff44, alpha: yAlpha * 0.5 })
   g.stroke()
+}
+
+function computeEffectiveSkeleton(
+  state: ReturnType<typeof useEditorStore.getState>
+): import('../model/types').Skeleton {
+  const { skeleton, editorMode, currentAnimationId, currentTime, animations } = state
+  if (editorMode !== 'animate' || !currentAnimationId) return skeleton
+  const animation = animations[currentAnimationId]
+  if (!animation) return skeleton
+  const pose = evaluatePose(animation, currentTime, skeleton)
+  const excluded = getDragExcludedIds()
+  const newBones: Record<string, import('../model/types').Bone> = {}
+  let changed = false
+  for (const [id, bone] of Object.entries(skeleton.bones)) {
+    if (excluded.has(id)) { newBones[id] = bone; continue }
+    const t = pose[id] ?? bone.bindTransform
+    if (t !== bone.localTransform) { newBones[id] = { ...bone, localTransform: t }; changed = true }
+    else newBones[id] = bone
+  }
+  return changed ? { ...skeleton, bones: newBones } : skeleton
 }
 
 const BONE_SNAP_PX = 15
@@ -495,6 +516,22 @@ export function BoneRendererLayer() {
           store.getState().commitTransformDrag(drag.boneId, drag.preDragSkeleton)
         }
       }
+      // Auto-keyframe position in animate mode after drag
+      if (boneDragRef.current) {
+        const endState = store.getState()
+        if (endState.editorMode === 'animate' && endState.currentAnimationId) {
+          const animId = endState.currentAnimationId
+          const drag = boneDragRef.current
+          const insertPosKeys = (id: string) => {
+            const b = endState.skeleton.bones[id]
+            if (!b) return
+            endState.addKeyframe(animId, id, 'x', { value: b.localTransform.x, interpolation: 'linear' })
+            endState.addKeyframe(animId, id, 'y', { value: b.localTransform.y, interpolation: 'linear' })
+          }
+          insertPosKeys(drag.boneId)
+          for (const coId of drag.coselectedStarts.keys()) insertPosKeys(coId)
+        }
+      }
       boneDragRef.current = null
       dragSnapRef.current = null
     }
@@ -610,6 +647,9 @@ export function BoneRendererLayer() {
     const { container: bonesContainer, camera } = cameraRef.current
     const state = store.getState()
     const { skeleton, selectedBoneId, selectedBoneIds, hoveredBoneId, gridVisible, activeTool, attachments } = state
+    const effectiveSkeleton = computeEffectiveSkeleton(state)
+    setEffectiveSkeleton(effectiveSkeleton)
+    setBoneRendererDragId(boneDragRef.current?.boneId ?? null)
     const camState = camera.getState()
 
     // --- Grid ---
@@ -670,7 +710,18 @@ export function BoneRendererLayer() {
             }
             if (store.getState().activeTool === 'select') {
               const snap = store.getState()
-              const t = snap.skeleton.bones[bone.id].localTransform
+
+              // In animate mode, seed localTransform from evaluated pose so drag starts at animated position
+              let animPose: Record<string, import('../model/types').BoneTransform> = {}
+              if (snap.editorMode === 'animate' && snap.currentAnimationId) {
+                const anim = snap.animations[snap.currentAnimationId]
+                if (anim) {
+                  animPose = evaluatePose(anim, snap.currentTime, snap.skeleton)
+                  const at = animPose[bone.id] ?? snap.skeleton.bones[bone.id]?.bindTransform
+                  if (at) store.getState().setBoneTransformSilent(bone.id, at)
+                }
+              }
+              const t = store.getState().skeleton.bones[bone.id].localTransform
 
               // Detect if bone's start is coincident with parent's start or tip
               let attachedToParent = false
@@ -722,7 +773,10 @@ export function BoneRendererLayer() {
                   pid = snap.skeleton.bones[pid]?.parentId ?? null
                 }
                 if (!hasSelectedAncestor) {
-                  coselectedStarts.set(selId, { x: selBone.localTransform.x, y: selBone.localTransform.y })
+                  let coX = selBone.localTransform.x, coY = selBone.localTransform.y
+                  const coAt = animPose[selId]
+                  if (coAt) { coX = coAt.x; coY = coAt.y; store.getState().setBoneTransformSilent(selId, coAt) }
+                  coselectedStarts.set(selId, { x: coX, y: coY })
                 }
               }
 
@@ -753,7 +807,7 @@ export function BoneRendererLayer() {
 
       // Compute world transform and apply to Graphics
       try {
-        const world = evaluateWorldTransform(bone.id, skeleton)
+        const world = evaluateWorldTransform(bone.id, effectiveSkeleton)
         const isSelected = selectedBoneIds.includes(bone.id)
         const isHovered = hoveredBoneId === bone.id
         const isDescendant = descendantIds.has(bone.id)
@@ -815,7 +869,7 @@ export function BoneRendererLayer() {
     if (constraintIndicatorRef.current) {
       const drag = boneDragRef.current
       if (drag && drag.constraintAxis && selectedBoneId) {
-        const world = evaluateWorldTransform(selectedBoneId, skeleton)
+        const world = evaluateWorldTransform(selectedBoneId, effectiveSkeleton)
         constraintIndicatorRef.current.position.set(world.x, world.y)
         // No rotation - constraint is in screen/world space, not bone local space
         constraintIndicatorRef.current.rotation = 0

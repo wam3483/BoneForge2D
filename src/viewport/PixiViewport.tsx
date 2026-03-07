@@ -91,14 +91,13 @@ export function PixiViewport() {
       onContextMenu={e => e.preventDefault()}
     >
       <Application resizeTo={containerRef} antialias background={0x1a1a2e}>
-        <AttachmentRendererLayer />
         <BoneRendererLayer />
+        <AttachmentRendererLayer />
       </Application>
 
-      {/* Animate Mode banner */}
       {editorMode === 'animate' && (
-        <div className="absolute top-8 left-1/2 -translate-x-1/2 bg-orange-600/90 text-white text-sm px-4 py-1.5 rounded-full backdrop-blur-sm pointer-events-none">
-          Animate Mode — timeline coming in Phase 2
+        <div className="absolute top-2 left-1/2 -translate-x-1/2 bg-orange-600/80 text-white text-xs px-3 py-1 rounded-full backdrop-blur-sm pointer-events-none">
+          Animate Mode
         </div>
       )}
     </div>

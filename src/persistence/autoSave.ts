@@ -3,11 +3,12 @@ import { saveProjectData } from './indexeddb'
 import type { EditorState } from '../model/types'
 
 /** Serialize document state (exclude view state from save) */
-function serializeDocument(state: EditorState): { skeleton: object; imageAssets: Record<string, object>; attachments: Record<string, object> } {
+function serializeDocument(state: EditorState): { skeleton: object; imageAssets: Record<string, object>; attachments: Record<string, object>; animations: Record<string, object> } {
   return {
     skeleton: state.skeleton,
     imageAssets: state.imageAssets,      // dataUrl stored here for display; ArrayBuffer stored separately
     attachments: state.attachments,
+    animations: state.animations,
   }
 }
 
@@ -47,17 +48,20 @@ export function initAutoSave(): () => void {
   let prevSkeleton = useEditorStore.getState().skeleton
   let prevImageAssets = useEditorStore.getState().imageAssets
   let prevAttachments = useEditorStore.getState().attachments
+  let prevAnimations = useEditorStore.getState().animations
 
   const unsub = useEditorStore.subscribe((state) => {
     // Only save when document state actually changed
     if (
       state.skeleton !== prevSkeleton ||
       state.imageAssets !== prevImageAssets ||
-      state.attachments !== prevAttachments
+      state.attachments !== prevAttachments ||
+      state.animations !== prevAnimations
     ) {
       prevSkeleton = state.skeleton
       prevImageAssets = state.imageAssets
       prevAttachments = state.attachments
+      prevAnimations = state.animations
       debouncedSave(state)
     }
   })

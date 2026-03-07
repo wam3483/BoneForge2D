@@ -3,6 +3,7 @@ import { useTick } from '@pixi/react'
 import { Sprite, Texture } from 'pixi.js'
 import { useEditorStore } from '../store'
 import { evaluateWorldTransform } from '../model/transforms'
+import { getEffectiveSkeleton } from './animationState'
 import { getAttachmentsContainer } from './AttachmentsRef'
 import type { ImageAsset } from '../model/types'
 
@@ -63,7 +64,7 @@ export function AttachmentRendererLayer() {
       }
 
       // Position sprite at bone world transform
-      const world = evaluateWorldTransform(attachment.boneId, skeleton)
+      const world = evaluateWorldTransform(attachment.boneId, getEffectiveSkeleton(skeleton))
       sprite.visible = bone.visible
 
       // Pivot: normalized (0.5, 0.5) = center of image

@@ -1,6 +1,7 @@
 import { Application, Container, Graphics, FederatedPointerEvent, Rectangle } from 'pixi.js'
 import { useEditorStore } from '../store'
 import { evaluateWorldTransform } from '../model/transforms'
+import { getEffectiveSkeleton, setGizmoDragId } from './animationState'
 import type { BoneTransform, Skeleton } from '../model/types'
 import { ViewportCamera } from './ViewportCamera'
 
@@ -226,7 +227,7 @@ export class GizmoLayer {
       return
     }
 
-    const world = evaluateWorldTransform(selectedBoneId, skeleton)
+    const world = evaluateWorldTransform(selectedBoneId, getEffectiveSkeleton(skeleton))
     this.rotateGizmo.setVisible(tool === 'rotate')
     this.scaleGizmo.setVisible(tool === 'scale')
 
@@ -266,12 +267,17 @@ export class GizmoLayer {
     this.activeGizmo = gizmoMode
     this.dragBoneId = boneId
     this.preDragSkeleton = state.skeleton
-    this.boneStartTransform = { ...state.skeleton.bones[boneId].localTransform }
+    setGizmoDragId(boneId)
+    const effSkel = getEffectiveSkeleton(state.skeleton)
+    this.boneStartTransform = { ...effSkel.bones[boneId].localTransform }
+    if (state.editorMode === 'animate') {
+      useEditorStore.getState().setBoneTransformSilent(boneId, this.boneStartTransform)
+    }
     this.dragStart = { screenX: e.global.x, screenY: e.global.y, localX: 0, localY: 0 }
     this.dragMoved = false
 
     if (gizmoMode === 'rotate') {
-      const world = evaluateWorldTransform(boneId, state.skeleton)
+      const world = evaluateWorldTransform(boneId, getEffectiveSkeleton(state.skeleton))
       // Use camera's worldToScreen for proper coordinate transformation
       this.boneCenterScreen = this.camera.worldToScreen(world.x, world.y)
       this.rotateLastMouse = { x: e.global.x, y: e.global.y }
@@ -311,6 +317,21 @@ export class GizmoLayer {
         }
       }
     }
+    // Auto-keyframe in animate mode
+    if (this.isDragging && this.dragMoved && this.dragBoneId) {
+      const es = useEditorStore.getState()
+      if (es.editorMode === 'animate' && es.currentAnimationId) {
+        const bone = es.skeleton.bones[this.dragBoneId]
+        if (bone) {
+          if (this.activeGizmo === 'rotate') es.addKeyframe(es.currentAnimationId, this.dragBoneId, 'rotation', { value: bone.localTransform.rotation, interpolation: 'linear' })
+          else if (this.activeGizmo === 'scale') {
+            es.addKeyframe(es.currentAnimationId, this.dragBoneId, 'scaleX', { value: bone.localTransform.scaleX, interpolation: 'linear' })
+            es.addKeyframe(es.currentAnimationId, this.dragBoneId, 'scaleY', { value: bone.localTransform.scaleY, interpolation: 'linear' })
+          }
+        }
+      }
+    }
+    setGizmoDragId(null)
     this.isDragging = false
     this.activeGizmo = null
     this.boneStartTransform = null
