@@ -30,6 +30,52 @@ export function evaluateWorldTransform(boneId: string, skeleton: Skeleton): Worl
 }
 
 /**
+ * Like evaluateWorldTransform but uses bindTransform instead of localTransform.
+ */
+export function evaluateBindWorldTransform(boneId: string, skeleton: Skeleton): WorldTransform {
+  const bone = skeleton.bones[boneId]
+  if (!bone) throw new Error(`Bone not found: ${boneId}`)
+
+  if (!bone.parentId) {
+    return { ...bone.bindTransform }
+  }
+
+  const parentWorld = evaluateBindWorldTransform(bone.parentId, skeleton)
+  const local = bone.bindTransform
+
+  const cos = Math.cos(parentWorld.rotation)
+  const sin = Math.sin(parentWorld.rotation)
+  const scaledX = local.x * parentWorld.scaleX
+  const scaledY = local.y * parentWorld.scaleY
+
+  return {
+    x: parentWorld.x + cos * scaledX - sin * scaledY,
+    y: parentWorld.y + sin * scaledX + cos * scaledY,
+    rotation: parentWorld.rotation + local.rotation,
+    scaleX: parentWorld.scaleX * local.scaleX,
+    scaleY: parentWorld.scaleY * local.scaleY,
+  }
+}
+
+/**
+ * Converts a world transform into a local transform relative to a given parent world transform.
+ * Inverse of the parent-child composition in evaluateWorldTransform.
+ */
+export function worldToLocal(world: WorldTransform, parentWorld: WorldTransform): BoneTransform {
+  const cos = Math.cos(parentWorld.rotation)
+  const sin = Math.sin(parentWorld.rotation)
+  const dx = world.x - parentWorld.x
+  const dy = world.y - parentWorld.y
+  return {
+    x:        (cos * dx + sin * dy) / parentWorld.scaleX,
+    y:        (-sin * dx + cos * dy) / parentWorld.scaleY,
+    rotation: world.rotation - parentWorld.rotation,
+    scaleX:   world.scaleX / parentWorld.scaleX,
+    scaleY:   world.scaleY / parentWorld.scaleY,
+  }
+}
+
+/**
  * Evaluates an animation at a given time, returning a map of boneId → BoneTransform.
  * Each bone starts from its bindTransform and has animated channels overlaid on top.
  * Only bones that have at least one channel in the animation are included in the result.

@@ -375,8 +375,16 @@ export function TimelinePanel() {
         <select
           className="bg-zinc-800 border border-zinc-600 rounded text-xs px-2 py-1 text-white w-36 cursor-pointer"
           value={currentAnimId ?? ''}
-          onChange={e => setCurrentAnim(e.target.value || null)}
+          onChange={e => {
+            if (e.target.value === '__new__') {
+              setCreating(true)
+              setTimeout(() => nameInputRef.current?.focus(), 50)
+              return
+            }
+            setCurrentAnim(e.target.value || null)
+          }}
         >
+          <option value="__new__">...New Animation</option>
           <option value="">— select —</option>
           {Object.values(animations).map(a => (
             <option key={a.id} value={a.id}>{a.name}</option>

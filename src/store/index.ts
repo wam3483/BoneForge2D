@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 import type { EditorState, Skeleton, ImageAsset, Attachment, Bone, BoneTransform, Project, Animation, AnimatedProperty, Keyframe } from '../model/types'
 import { withUndo, applyPatches } from './undoRedo'
+import { evaluateWorldTransform, evaluateBindWorldTransform, worldToLocal } from '../model/transforms'
 import type { PatchEntry } from './undoRedo'
 import * as idb from '../persistence/indexeddb'
 
@@ -282,6 +283,18 @@ export const useEditorStore = create<EditorStore>()(
 
     reparentBone: (boneId: string, newParentId: string | null) => {
       const state = get()
+
+      // Compute world transforms before any mutation so we can preserve visual position
+      const boneWorldLocal = evaluateWorldTransform(boneId, state.skeleton)
+      const boneWorldBind  = evaluateBindWorldTransform(boneId, state.skeleton)
+
+      const newLocalTransform = newParentId
+        ? worldToLocal(boneWorldLocal, evaluateWorldTransform(newParentId, state.skeleton))
+        : { ...boneWorldLocal }
+      const newBindTransform = newParentId
+        ? worldToLocal(boneWorldBind, evaluateBindWorldTransform(newParentId, state.skeleton))
+        : { ...boneWorldBind }
+
       const { next: newSkeleton, undoStack: newUndo, redoStack: newRedo } = withUndo(
         state.skeleton,
         (draft: Skeleton) => {
@@ -301,6 +314,10 @@ export const useEditorStore = create<EditorStore>()(
             const rootIdx = draft.rootBoneIds.indexOf(boneId)
             if (rootIdx >= 0) draft.rootBoneIds.splice(rootIdx, 1)
           }
+
+          // Recompute local transforms so the bone stays in the same world position
+          bone.localTransform = newLocalTransform
+          bone.bindTransform  = newBindTransform
 
           // Set new parent
           bone.parentId = newParentId
