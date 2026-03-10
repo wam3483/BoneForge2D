@@ -1,5 +1,7 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useEditorStore } from '../store'
+import { evaluatePose } from '../model/transforms'
+import type { AnimatedProperty } from '../model/types'
 
 function toDeg(rad: number): number {
   return Math.round((rad * 180) / Math.PI * 1000) / 1000
@@ -273,9 +275,30 @@ export function BonePropertiesPanel() {
   const setBoneColor = useEditorStore(s => s.setBoneColor)
   const setBoneVisibility = useEditorStore(s => s.setBoneVisibility)
   const setBoneTransform = useEditorStore(s => s.setBoneTransform)
+  const editorMode = useEditorStore(s => s.editorMode)
+  const animations = useEditorStore(s => s.animations)
+  const currentAnimationId = useEditorStore(s => s.currentAnimationId)
+  const currentTime = useEditorStore(s => s.currentTime)
+  const addKeyframe = useEditorStore(s => s.addKeyframe)
 
   const bone = selectedBoneId ? skeleton.bones[selectedBoneId] : null
   const parentBone = bone?.parentId ? skeleton.bones[bone.parentId] : null
+
+  // In animate mode, show the evaluated pose transform instead of raw localTransform
+  const currentAnimation = currentAnimationId ? animations[currentAnimationId] : null
+  const posedTransforms = useMemo(() => {
+    if (editorMode !== 'animate' || !currentAnimation) return null
+    return evaluatePose(currentAnimation, currentTime, skeleton)
+  }, [editorMode, currentAnimation, currentTime, skeleton])
+
+  // Set transform + auto-keyframe in animate mode
+  const setTransformProp = useCallback((prop: AnimatedProperty, value: number) => {
+    if (!bone) return
+    setBoneTransform(bone.id, { [prop]: value })
+    if (editorMode === 'animate' && currentAnimationId) {
+      addKeyframe(currentAnimationId, bone.id, prop, { value, interpolation: 'linear' })
+    }
+  }, [bone, editorMode, currentAnimationId, setBoneTransform, addKeyframe])
 
   const [nameValue, setNameValue] = useState('')
   const nameRef = useRef<HTMLInputElement>(null)
@@ -297,7 +320,7 @@ export function BonePropertiesPanel() {
     )
   }
 
-  const lt = bone.localTransform
+  const lt = (posedTransforms && selectedBoneId ? posedTransforms[selectedBoneId] : null) ?? bone.localTransform
   const bt = bone.bindTransform
   const boneColor = bone.color ?? '#7c3aed'
   const boneColorAlpha = bone.colorAlpha ?? 0.85
@@ -372,22 +395,22 @@ export function BonePropertiesPanel() {
           />
 
           {/* ── Local Transform ── */}
-          <SectionRow label="Local Transform" />
+          <SectionRow label={posedTransforms ? 'Posed Transform' : 'Local Transform'} />
 
           <PropRow label="X">
-            <NumCell value={lt.x} onChange={v => setBoneTransform(bone.id, { x: v })} />
+            <NumCell value={lt.x} onChange={v => setTransformProp('x', v)} />
           </PropRow>
           <PropRow label="Y">
-            <NumCell value={lt.y} onChange={v => setBoneTransform(bone.id, { y: v })} />
+            <NumCell value={lt.y} onChange={v => setTransformProp('y', v)} />
           </PropRow>
           <PropRow label="Rotation °">
-            <NumCell value={toDeg(lt.rotation)} step={0.1} onChange={v => setBoneTransform(bone.id, { rotation: toRad(v) })} />
+            <NumCell value={toDeg(lt.rotation)} step={0.1} onChange={v => setTransformProp('rotation', toRad(v))} />
           </PropRow>
           <PropRow label="Scale X">
-            <NumCell value={lt.scaleX} step={0.01} onChange={v => setBoneTransform(bone.id, { scaleX: v })} />
+            <NumCell value={lt.scaleX} step={0.01} onChange={v => setTransformProp('scaleX', v)} />
           </PropRow>
           <PropRow label="Scale Y">
-            <NumCell value={lt.scaleY} step={0.01} onChange={v => setBoneTransform(bone.id, { scaleY: v })} />
+            <NumCell value={lt.scaleY} step={0.01} onChange={v => setTransformProp('scaleY', v)} />
           </PropRow>
 
           {/* ── Bind Transform ── */}

@@ -91,9 +91,13 @@ export default function App() {
         e.preventDefault()
         useEditorStore.getState().saveCurrentProject()
       } else if (e.ctrlKey && e.key === 'c') {
+        const tag = (e.target as HTMLElement).tagName
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
         e.preventDefault()
         useEditorStore.getState().copyBones()
       } else if (e.ctrlKey && e.key === 'v') {
+        const tag = (e.target as HTMLElement).tagName
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
         e.preventDefault()
         useEditorStore.getState().pasteBones()
       } else if (e.ctrlKey && e.key === 'g') {

@@ -1,6 +1,11 @@
-import { useRef, useState } from 'react'
+import { useRef, useState, useCallback } from 'react'
 import { useEditorStore } from '../store'
 import type { Skeleton, Attachment } from '../model/types'
+
+const HIERARCHY_WIDTH_KEY = 'boneforge-hierarchy-width'
+const DEFAULT_WIDTH = 208 // w-52 = 13rem = 208px
+const MIN_WIDTH = 140
+const MAX_WIDTH = 500
 
 /** Returns true if targetId is a descendant of ancestorId. */
 function isDescendant(ancestorId: string, targetId: string, skeleton: Skeleton): boolean {
@@ -84,10 +89,10 @@ function BoneNode({
   return (
     <>
       <div
-        style={{ paddingLeft: depth * 16 + 8 }}
+        style={{ paddingLeft: depth * 16 + 8, minWidth: depth * 16 + 120 }}
         draggable={!editing}
         className={[
-          'flex items-center h-7 gap-1.5 pr-2 cursor-pointer rounded mx-1 text-xs select-none',
+          'flex items-center h-7 gap-1.5 pr-2 cursor-pointer rounded mx-1 text-xs select-none whitespace-nowrap',
           isOver
             ? 'bg-cyan-800 outline outline-1 outline-cyan-400 text-white'
             : isSelected
@@ -203,6 +208,40 @@ export function BoneHierarchy() {
   const reparentBone = useEditorStore(s => s.reparentBone)
   const attachments = useEditorStore(s => s.attachments)
 
+  // Persistent panel width
+  const [panelWidth, setPanelWidth] = useState(() => {
+    try {
+      const stored = localStorage.getItem(HIERARCHY_WIDTH_KEY)
+      if (stored) {
+        const v = parseInt(stored, 10)
+        if (!isNaN(v) && v >= MIN_WIDTH && v <= MAX_WIDTH) return v
+      }
+    } catch { /* ignore */ }
+    return DEFAULT_WIDTH
+  })
+  const latestWidthRef = useRef(panelWidth)
+  latestWidthRef.current = panelWidth
+
+  const handleResizeMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    const startX = e.clientX
+    const startW = latestWidthRef.current
+
+    const onMove = (me: MouseEvent) => {
+      const delta = me.clientX - startX
+      const newW = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, startW + delta))
+      setPanelWidth(newW)
+      window.dispatchEvent(new Event('resize'))
+    }
+    const onUp = () => {
+      try { localStorage.setItem(HIERARCHY_WIDTH_KEY, String(latestWidthRef.current)) } catch { /* ignore */ }
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }, [])
+
   const [draggingId, setDraggingId] = useState<string | null>(null)
   const [overBoneId, setOverBoneId] = useState<string | null>(null)
 
@@ -237,15 +276,17 @@ export function BoneHierarchy() {
 
   return (
     <div
-      className="w-52 bg-gray-800 border-r border-gray-700 flex flex-col h-full"
+      className="bg-gray-800 border-r border-gray-700 flex h-full flex-shrink-0"
+      style={{ width: panelWidth }}
       onClick={() => setSelectedBone(null)}
     >
-      <div className="px-3 py-2 border-b border-gray-700 flex-shrink-0">
-        <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Bones</h2>
-      </div>
+      <div className="flex flex-col flex-1 min-w-0">
+        <div className="px-3 py-2 border-b border-gray-700 flex-shrink-0">
+          <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Bones</h2>
+        </div>
 
-      <div
-        className="flex-1 overflow-y-auto py-1"
+        <div
+          className="flex-1 overflow-auto py-1"
         onDragOver={e => {
           // Fires only when over panel background (bones stop propagation)
           if (!draggingId) return
@@ -293,6 +334,13 @@ export function BoneHierarchy() {
           </>
         )}
       </div>
+      </div>
+
+      {/* Resize handle (right edge) */}
+      <div
+        className="w-1 cursor-ew-resize bg-transparent hover:bg-violet-500/40 transition-colors flex-shrink-0"
+        onMouseDown={handleResizeMouseDown}
+      />
     </div>
   )
 }

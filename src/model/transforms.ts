@@ -97,16 +97,18 @@ export function evaluatePose(
       result[boneId] = { ...bone.bindTransform }
     }
 
-    result[boneId][property] = sampleChannel(keyframes, clampedTime)
+    const bindValue = bone.bindTransform[property]
+    result[boneId][property] = sampleChannel(keyframes, clampedTime, bindValue)
   }
 
   return result
 }
 
-function sampleChannel(keyframes: Keyframe[], time: number): number {
-  if (keyframes.length === 1) return keyframes[0].value
+function sampleChannel(keyframes: Keyframe[], time: number, bindValue: number): number {
+  // Before the first keyframe: hold the bind pose value
+  if (time < keyframes[0].time) return bindValue
 
-  if (time <= keyframes[0].time) return keyframes[0].value
+  if (keyframes.length === 1) return keyframes[0].value
 
   const last = keyframes[keyframes.length - 1]
   if (time >= last.time) return last.value

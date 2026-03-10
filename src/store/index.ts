@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 import type { EditorState, Skeleton, ImageAsset, Attachment, Bone, BoneTransform, Project, Animation, AnimatedProperty, Keyframe } from '../model/types'
-import { withUndo, applyPatches } from './undoRedo'
+import { withUndo, withUndoCompound, applyPatches } from './undoRedo'
 import { evaluateWorldTransform, evaluateBindWorldTransform, worldToLocal } from '../model/transforms'
 import type { PatchEntry } from './undoRedo'
 import * as idb from '../persistence/indexeddb'
@@ -71,8 +71,10 @@ export type EditorStore = EditorState & {
   createAnimation: (name: string, duration: number) => string
   deleteAnimation: (animationId: string) => void
   updateAnimation: (animationId: string, patch: { name?: string; duration?: number; loop?: boolean }) => void
+  toggleLinkedGroup: (animationId: string, group: 'position' | 'scale') => void
   addKeyframe: (animationId: string, boneId: string, property: AnimatedProperty, keyframe: Omit<Keyframe, 'time'>) => void
   updateKeyframe: (animationId: string, boneId: string, property: AnimatedProperty, keyframeIndex: number, patch: Partial<Omit<Keyframe, 'time'>>) => void
+  moveKeyframe: (animationId: string, boneId: string, property: AnimatedProperty, keyframeIndex: number, newTime: number) => void
   deleteKeyframe: (animationId: string, boneId: string, property: AnimatedProperty, keyframeIndex: number) => void
 
   // Animation playback state (no undo)
@@ -182,7 +184,9 @@ export const useEditorStore = create<EditorStore>()(
 
     deleteBone: (boneId: string) => {
       const state = get()
-      const { next: newSkeleton, undoStack: newUndo, redoStack: newRedo } = withUndo(
+      const {
+        nextSkeleton, nextAnimations, undoStack: newUndo, redoStack: newRedo,
+      } = withUndoCompound(
         state.skeleton,
         (draft: Skeleton) => {
           const bone = draft.bones[boneId]
@@ -226,12 +230,19 @@ export const useEditorStore = create<EditorStore>()(
           // Delete the bone
           delete draft.bones[boneId]
         },
-        state.undoStack,
-        state.redoStack
+        state.animations,
+        (draft: Record<string, Animation>) => {
+          // Remove all channels referencing this bone from every animation
+          for (const anim of Object.values(draft)) {
+            anim.channels = anim.channels.filter(ch => ch.boneId !== boneId)
+          }
+        },
+        state.undoStack
       )
 
       set((state) => {
-        state.skeleton = newSkeleton
+        state.skeleton = nextSkeleton
+        state.animations = nextAnimations
         state.undoStack = newUndo
         state.redoStack = newRedo
       })
@@ -239,21 +250,24 @@ export const useEditorStore = create<EditorStore>()(
 
     deleteBoneSubtree: (boneId: string) => {
       const state = get()
-      const { next: newSkeleton, undoStack: newUndo, redoStack: newRedo } = withUndo(
+
+      // Pre-collect the subtree IDs for the animations recipe
+      const toDelete = new Set<string>()
+      const queue = [boneId]
+      while (queue.length > 0) {
+        const id = queue.pop()!
+        toDelete.add(id)
+        const b = state.skeleton.bones[id]
+        if (b) queue.push(...b.childIds)
+      }
+
+      const {
+        nextSkeleton, nextAnimations, undoStack: newUndo, redoStack: newRedo,
+      } = withUndoCompound(
         state.skeleton,
         (draft: Skeleton) => {
           const bone = draft.bones[boneId]
           if (!bone) return
-
-          // Collect the full subtree (BFS)
-          const toDelete = new Set<string>()
-          const queue = [boneId]
-          while (queue.length > 0) {
-            const id = queue.pop()!
-            toDelete.add(id)
-            const b = draft.bones[id]
-            if (b) queue.push(...b.childIds)
-          }
 
           // Detach root of subtree from its parent / rootBoneIds
           if (bone.parentId) {
@@ -270,12 +284,19 @@ export const useEditorStore = create<EditorStore>()(
             delete draft.bones[id]
           }
         },
-        state.undoStack,
-        state.redoStack
+        state.animations,
+        (draft: Record<string, Animation>) => {
+          // Remove all channels referencing any bone in the subtree
+          for (const anim of Object.values(draft)) {
+            anim.channels = anim.channels.filter(ch => !toDelete.has(ch.boneId))
+          }
+        },
+        state.undoStack
       )
 
       set((state) => {
-        state.skeleton = newSkeleton
+        state.skeleton = nextSkeleton
+        state.animations = nextAnimations
         state.undoStack = newUndo
         state.redoStack = newRedo
       })
@@ -649,7 +670,10 @@ export const useEditorStore = create<EditorStore>()(
         const entry: PatchEntry | undefined = state.undoStack.pop()
         if (!entry) return
 
-        if ((entry.slice ?? 'skeleton') === 'animations') {
+        if (entry.compound) {
+          state.skeleton = applyPatches(state.skeleton as any, entry.skeleton.inverse) as Skeleton
+          state.animations = applyPatches(state.animations as any, entry.animations.inverse) as Record<string, Animation>
+        } else if ((entry.slice ?? 'skeleton') === 'animations') {
           state.animations = applyPatches(state.animations as any, entry.inverse) as Record<string, Animation>
         } else {
           state.skeleton = applyPatches(state.skeleton as any, entry.inverse) as Skeleton
@@ -663,7 +687,10 @@ export const useEditorStore = create<EditorStore>()(
         const entry: PatchEntry | undefined = state.redoStack.pop()
         if (!entry) return
 
-        if ((entry.slice ?? 'skeleton') === 'animations') {
+        if (entry.compound) {
+          state.skeleton = applyPatches(state.skeleton as any, entry.skeleton.forward) as Skeleton
+          state.animations = applyPatches(state.animations as any, entry.animations.forward) as Record<string, Animation>
+        } else if ((entry.slice ?? 'skeleton') === 'animations') {
           state.animations = applyPatches(state.animations as any, entry.forward) as Record<string, Animation>
         } else {
           state.skeleton = applyPatches(state.skeleton as any, entry.forward) as Skeleton
@@ -733,6 +760,14 @@ export const useEditorStore = create<EditorStore>()(
 
     setEditorMode: (mode: 'pose' | 'animate') => {
       set((state) => {
+        // When switching to pose mode, reset playback and restore bind transforms
+        if (mode === 'pose' && state.editorMode === 'animate') {
+          state.isPlaying = false
+          state.currentTime = 0
+          for (const bone of Object.values(state.skeleton.bones)) {
+            bone.localTransform = { ...bone.bindTransform }
+          }
+        }
         state.editorMode = mode
       })
     },
@@ -906,7 +941,7 @@ export const useEditorStore = create<EditorStore>()(
       const { next: newAnimations, undoStack: newUndo, redoStack: newRedo } = withUndo(
         state.animations,
         (draft: Record<string, Animation>) => {
-          draft[animId] = { id: animId, name, duration, loop: true, channels: [] }
+          draft[animId] = { id: animId, name, duration, loop: true, linkedGroups: { position: true, scale: true }, channels: [] }
         },
         state.undoStack,
         state.redoStack,
@@ -966,6 +1001,15 @@ export const useEditorStore = create<EditorStore>()(
       })
     },
 
+    toggleLinkedGroup: (animationId: string, group: 'position' | 'scale') => {
+      set((s) => {
+        const anim = s.animations[animationId]
+        if (!anim) return
+        if (!anim.linkedGroups) anim.linkedGroups = { position: true, scale: true }
+        anim.linkedGroups[group] = !anim.linkedGroups[group]
+      })
+    },
+
     addKeyframe: (animationId: string, boneId: string, property: AnimatedProperty, keyframe: Omit<Keyframe, 'time'>) => {
       const state = get()
       const time = state.currentTime
@@ -1015,7 +1059,61 @@ export const useEditorStore = create<EditorStore>()(
           const channel = anim.channels.find(c => c.boneId === boneId && c.property === property)
           if (!channel) return
           const kf = channel.keyframes[keyframeIndex]
-          if (kf) Object.assign(kf, patch)
+          if (!kf) return
+          const kfTime = kf.time
+          Object.assign(kf, patch)
+
+          // Propagate interpolation to linked sibling properties
+          const linked = anim.linkedGroups ?? { position: true, scale: true }
+          if (patch.interpolation) {
+            const LINKED_SIBLINGS: Partial<Record<AnimatedProperty, AnimatedProperty>> = {
+              x: 'y', y: 'x', scaleX: 'scaleY', scaleY: 'scaleX',
+            }
+            const sibling = LINKED_SIBLINGS[property]
+            const isLinked = sibling && (
+              ((property === 'x' || property === 'y') && linked.position) ||
+              ((property === 'scaleX' || property === 'scaleY') && linked.scale)
+            )
+            if (isLinked && sibling) {
+              const sibCh = anim.channels.find(c => c.boneId === boneId && c.property === sibling)
+              if (sibCh) {
+                const sibKf = sibCh.keyframes.find(k => k.time === kfTime)
+                if (sibKf) sibKf.interpolation = patch.interpolation
+              }
+            }
+          }
+        },
+        state.undoStack,
+        state.redoStack,
+        'animations'
+      )
+      set((s) => {
+        s.animations = newAnimations
+        s.undoStack = newUndo
+        s.redoStack = newRedo
+      })
+    },
+
+    moveKeyframe: (animationId: string, boneId: string, property: AnimatedProperty, keyframeIndex: number, newTime: number) => {
+      const state = get()
+      const { next: newAnimations, undoStack: newUndo, redoStack: newRedo } = withUndo(
+        state.animations,
+        (draft: Record<string, Animation>) => {
+          const anim = draft[animationId]
+          if (!anim) return
+          const channel = anim.channels.find(c => c.boneId === boneId && c.property === property)
+          if (!channel) return
+          const kf = channel.keyframes[keyframeIndex]
+          if (!kf) return
+          // Clamp to animation duration
+          const clampedTime = Math.max(0, Math.min(newTime, anim.duration))
+          // Remove any existing keyframe at the target time (overwrite)
+          const conflictIdx = channel.keyframes.findIndex((k, i) => i !== keyframeIndex && k.time === clampedTime)
+          if (conflictIdx >= 0) channel.keyframes.splice(conflictIdx, 1)
+          // Update time
+          kf.time = clampedTime
+          // Re-sort by time
+          channel.keyframes.sort((a, b) => a.time - b.time)
         },
         state.undoStack,
         state.redoStack,

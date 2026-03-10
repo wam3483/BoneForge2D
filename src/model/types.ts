@@ -131,11 +131,17 @@ export interface AnimationChannel {
   keyframes: Keyframe[]    // sorted by time
 }
 
+export interface AnimationLinkedGroups {
+  position: boolean   // x ↔ y
+  scale: boolean      // scaleX ↔ scaleY
+}
+
 export interface Animation {
   id: string
   name: string
   duration: number         // seconds
   loop: boolean
+  linkedGroups: AnimationLinkedGroups
   channels: AnimationChannel[]
 }
 
@@ -147,9 +153,9 @@ export interface EditorState {
   imageAssets: Record<string, ImageAsset>
   attachments: Record<string, Attachment>
   animations: Record<string, Animation>
-  // Undo/redo stacks (Immer patches)
-  undoStack: Array<{ inverse: import('immer').Patch[]; forward: import('immer').Patch[] }>
-  redoStack: Array<{ inverse: import('immer').Patch[]; forward: import('immer').Patch[] }>
+  // Undo/redo stacks (Immer patches — single-slice or compound)
+  undoStack: Array<import('../store/undoRedo').PatchEntry>
+  redoStack: Array<import('../store/undoRedo').PatchEntry>
   // View state (NOT in undo stack)
   selectedBoneId: string | null
   selectedBoneIds: string[]

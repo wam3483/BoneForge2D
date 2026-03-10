@@ -228,6 +228,38 @@ const LABEL_W = 156
 const RULER_H = 24
 const TRACK_H = 20
 
+const TIMELINE_STORAGE_KEY = 'boneforge-timeline-height'
+const DEFAULT_HEIGHT = 200
+const MIN_HEIGHT = 100
+const MAX_HEIGHT = 600
+
+/** Small icon indicating transform type next to property labels */
+function PropIcon({ prop }: { prop: AnimatedProperty }) {
+  const base = "flex-shrink-0 mr-1"
+  switch (prop) {
+    case 'x':
+    case 'y':
+      return (
+        <svg className={`${base} text-sky-400`} width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M8 2v12M2 8h12M8 2l-2 2M8 2l2 2M8 14l-2-2M8 14l2-2M2 8l2-2M2 8l2 2M14 8l-2-2M14 8l-2 2" />
+        </svg>
+      )
+    case 'rotation':
+      return (
+        <svg className={`${base} text-emerald-400`} width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M13 8a5 5 0 11-1.5-3.5M13 3v2h-2" />
+        </svg>
+      )
+    case 'scaleX':
+    case 'scaleY':
+      return (
+        <svg className={`${base} text-amber-400`} width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M3 13L13 3M13 3h-4M13 3v4M3 13h4M3 13V9" />
+        </svg>
+      )
+  }
+}
+
 const PROPERTIES: AnimatedProperty[] = ['x', 'y', 'rotation', 'scaleX', 'scaleY']
 const PROP_LABELS: Record<AnimatedProperty, string> = {
   x: 'X', y: 'Y', rotation: 'Rotation', scaleX: 'Scale X', scaleY: 'Scale Y',
@@ -251,8 +283,52 @@ export function TimelinePanel() {
   const addKeyframe      = useEditorStore(s => s.addKeyframe)
   const deleteKeyframe   = useEditorStore(s => s.deleteKeyframe)
   const updateKeyframe   = useEditorStore(s => s.updateKeyframe)
+  const moveKeyframe     = useEditorStore(s => s.moveKeyframe)
+  const toggleLinkedGroup = useEditorStore(s => s.toggleLinkedGroup)
 
   const [contextMenu, setContextMenu] = useState<ContextMenu>(null)
+
+  // Keyframe drag state
+  type KfDrag = { boneId: string; prop: AnimatedProperty; kfIndex: number; previewTime: number } | null
+  const [kfDrag, setKfDrag] = useState<KfDrag>(null)
+  const kfDragRef = useRef<{ boneId: string; prop: AnimatedProperty; kfIndex: number; origTime: number; trackLeft: number; previewTime: number } | null>(null)
+  const [collapsed, setCollapsed] = useState(false)
+
+  // Persistent panel height
+  const [panelHeight, setPanelHeight] = useState(() => {
+    try {
+      const stored = localStorage.getItem(TIMELINE_STORAGE_KEY)
+      if (stored) {
+        const v = parseInt(stored, 10)
+        if (!isNaN(v) && v >= MIN_HEIGHT && v <= MAX_HEIGHT) return v
+      }
+    } catch { /* ignore */ }
+    return DEFAULT_HEIGHT
+  })
+
+  // Drag resize from top edge
+  const latestHeightRef = useRef(panelHeight)
+  latestHeightRef.current = panelHeight
+
+  const handleResizeMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault()
+    const startY = e.clientY
+    const startH = latestHeightRef.current
+
+    const onMove = (me: MouseEvent) => {
+      const delta = startY - me.clientY
+      const newH = Math.max(MIN_HEIGHT, Math.min(MAX_HEIGHT, startH + delta))
+      setPanelHeight(newH)
+      window.dispatchEvent(new Event('resize'))
+    }
+    const onUp = () => {
+      try { localStorage.setItem(TIMELINE_STORAGE_KEY, String(latestHeightRef.current)) } catch { /* ignore */ }
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }
 
   // Close context menu on outside click
   useEffect(() => {
@@ -320,6 +396,46 @@ export function TimelinePanel() {
     window.addEventListener('mouseup', onUp)
   }
 
+  // ── Keyframe drag-to-move ────────────────────────────────────────────────
+  const handleKfDragStart = (
+    e: React.MouseEvent,
+    boneId: string,
+    prop: AnimatedProperty,
+    kfIndex: number,
+    origTime: number,
+  ) => {
+    e.preventDefault()
+    e.stopPropagation()
+    // Find the track element — walk up to the track container with position relative
+    let trackEl = e.currentTarget.parentElement
+    while (trackEl && getComputedStyle(trackEl).position !== 'relative') trackEl = trackEl.parentElement
+    const trackLeft = trackEl ? trackEl.getBoundingClientRect().left : 0
+
+    kfDragRef.current = { boneId, prop, kfIndex, origTime, trackLeft, previewTime: origTime }
+    setKfDrag({ boneId, prop, kfIndex, previewTime: origTime })
+
+    const dur = animation!.duration
+    const onMove = (me: MouseEvent) => {
+      if (!kfDragRef.current) return
+      const x = me.clientX - kfDragRef.current.trackLeft
+      const t = Math.max(0, Math.min(dur, Math.round(x / PX_PER_SEC * 1000) / 1000))
+      kfDragRef.current.previewTime = t
+      setKfDrag(prev => prev ? { ...prev, previewTime: t } : null)
+    }
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+      const drag = kfDragRef.current
+      if (drag && drag.previewTime !== drag.origTime) {
+        moveKeyframe(currentAnimId!, drag.boneId, drag.prop, drag.kfIndex, drag.previewTime)
+      }
+      kfDragRef.current = null
+      setKfDrag(null)
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }
+
   // ── Set Keyframe for selected bone ───────────────────────────────────────
   const handleSetKeyframe = () => {
     if (!currentAnimId || !selectedBoneId) return
@@ -366,10 +482,32 @@ export function TimelinePanel() {
   const trackWidth = animation ? Math.max(animation.duration * PX_PER_SEC + 80, 300) : 300
 
   return (
-    <div className="flex flex-col bg-zinc-900 border-t border-zinc-700 flex-shrink-0" style={{ height: 200 }}>
+    <div className="flex flex-col bg-zinc-900 border-t border-zinc-700 flex-shrink-0" style={{ height: collapsed ? 28 : panelHeight }}>
+
+      {/* ── Resize handle (top edge) ──────────────────────────────────────── */}
+      {!collapsed && (
+        <div
+          className="h-1 cursor-ns-resize bg-transparent hover:bg-violet-500/40 transition-colors flex-shrink-0"
+          onMouseDown={handleResizeMouseDown}
+        />
+      )}
 
       {/* ── Controls bar ─────────────────────────────────────────────────── */}
-      <div className="flex items-center gap-2 px-3 border-b border-zinc-700 flex-shrink-0" style={{ height: 36 }}>
+      <div className="flex items-center gap-2 px-3 border-b border-zinc-700 flex-shrink-0" style={{ height: collapsed ? 28 : 36 }}>
+
+        {/* Collapse / expand toggle */}
+        <button
+          onClick={() => { setCollapsed(c => !c); requestAnimationFrame(() => window.dispatchEvent(new Event('resize'))) }}
+          className="w-5 h-5 flex items-center justify-center text-zinc-500 hover:text-zinc-300 transition-colors flex-shrink-0"
+          title={collapsed ? 'Expand timeline' : 'Collapse timeline'}
+        >
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor">
+            {collapsed
+              ? <polygon points="2,1 8,5 2,9" />
+              : <polygon points="1,2 9,2 5,8" />
+            }
+          </svg>
+        </button>
 
         {/* Animation selector */}
         <select
@@ -472,7 +610,7 @@ export function TimelinePanel() {
       </div>
 
       {/* ── Track area ──────────────────────────────────────────────────────── */}
-      {animation ? (
+      {collapsed ? null : animation ? (
         <div className="flex-1 overflow-auto select-none" style={{ position: 'relative' }}>
           {/* Inner content — wide enough for full duration */}
           <div style={{ minWidth: LABEL_W + trackWidth }}>
@@ -528,6 +666,9 @@ export function TimelinePanel() {
                   {/* Property rows */}
                   {props.map(prop => {
                     const channel = animation.channels.find(c => c.boneId === boneId && c.property === prop)
+                    // Linked group indicator: show on first property of each pair
+                    const linkGroup = prop === 'x' ? 'position' : prop === 'scaleX' ? 'scale' : null
+                    const isLinked = linkGroup ? (animation.linkedGroups?.[linkGroup] ?? true) : false
                     return (
                       <div key={prop} className="flex" style={{ height: TRACK_H }}>
                         {/* Label */}
@@ -535,7 +676,20 @@ export function TimelinePanel() {
                           className="sticky left-0 z-10 flex-shrink-0 flex items-center px-4 border-b border-r border-zinc-700/50 bg-zinc-900"
                           style={{ width: LABEL_W }}
                         >
+                          <PropIcon prop={prop} />
                           <span className="text-[11px] text-zinc-500">{PROP_LABELS[prop]}</span>
+                          {linkGroup && (
+                            <button
+                              className={`ml-auto mr-1 text-[10px] leading-none px-1 py-0.5 rounded transition-colors ${isLinked ? 'text-violet-400 hover:text-violet-300' : 'text-zinc-600 hover:text-zinc-500'}`}
+                              title={`${isLinked ? 'Unlink' : 'Link'} ${linkGroup === 'position' ? 'X/Y' : 'ScaleX/Y'} interpolation`}
+                              onClick={() => toggleLinkedGroup(animation.id, linkGroup)}
+                            >
+                              {isLinked
+                                ? <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M7 9l-1.5 1.5a2.12 2.12 0 01-3-3L4 6m5-1l1.5-1.5a2.12 2.12 0 013 3L12 8M6 10l4-4"/></svg>
+                                : <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M7 9l-1.5 1.5a2.12 2.12 0 01-3-3L4 6m5-1l1.5-1.5a2.12 2.12 0 013 3L12 8M5.5 8.5l-1 1m6.5-5l-1 1"/></svg>
+                              }
+                            </button>
+                          )}
                         </div>
 
                         {/* Track */}
@@ -582,27 +736,38 @@ export function TimelinePanel() {
                           })}
 
                           {/* Keyframe diamonds */}
-                          {channel?.keyframes.map((kf, i) => (
-                            <div
-                              key={i}
-                              className={`absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-2.5 h-2.5 rotate-45 cursor-pointer z-10 transition-colors ${diamondColor(kf.interpolation)}`}
-                              style={{ left: kf.time * PX_PER_SEC }}
-                              title={`${PROP_LABELS[prop]} = ${kf.value.toFixed(3)} @ ${kf.time.toFixed(3)}s [${INTERP_LABELS[kf.interpolation]}]\nRight-click to change interpolation`}
-                              onClick={() => setPlaybackTime(kf.time)}
-                              onContextMenu={e => {
-                                e.preventDefault()
-                                e.stopPropagation()
-                                setContextMenu({
-                                  x: e.clientX,
-                                  y: e.clientY,
-                                  boneId,
-                                  prop,
-                                  kfIndex: i,
-                                  currentInterp: kf.interpolation,
-                                })
-                              }}
-                            />
-                          ))}
+                          {channel?.keyframes.map((kf, i) => {
+                            const isDragging = kfDrag && kfDrag.boneId === boneId && kfDrag.prop === prop && kfDrag.kfIndex === i
+                            const displayTime = isDragging ? kfDrag.previewTime : kf.time
+                            return (
+                              <div
+                                key={i}
+                                className={`absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-2.5 h-2.5 rotate-45 z-10 transition-colors ${isDragging ? 'cursor-grabbing ring-1 ring-white/60' : 'cursor-grab'} ${diamondColor(kf.interpolation)}`}
+                                style={{ left: displayTime * PX_PER_SEC }}
+                                title={isDragging ? `${displayTime.toFixed(3)}s` : `${PROP_LABELS[prop]} = ${kf.value.toFixed(3)} @ ${kf.time.toFixed(3)}s [${INTERP_LABELS[kf.interpolation]}]\nRight-click to change interpolation\nDrag to move`}
+                                onMouseDown={e => {
+                                  if (e.button === 0) handleKfDragStart(e, boneId, prop, i, kf.time)
+                                }}
+                                onClick={e => {
+                                  // Only seek if not dragging
+                                  if (!kfDrag) setPlaybackTime(kf.time)
+                                  e.stopPropagation()
+                                }}
+                                onContextMenu={e => {
+                                  e.preventDefault()
+                                  e.stopPropagation()
+                                  setContextMenu({
+                                    x: e.clientX,
+                                    y: e.clientY,
+                                    boneId,
+                                    prop,
+                                    kfIndex: i,
+                                    currentInterp: kf.interpolation,
+                                  })
+                                }}
+                              />
+                            )
+                          })}
                         </div>
                       </div>
                     )
